@@ -1,0 +1,179 @@
+/* GroupedCommentList — compact density per Stage 3 amendments.
+
+   Row padding pinned to --sds-size-space-200 (~8px), body text 13px (between
+   SDS body-small 12px and body-base 14px), meta text body-small.
+   This preserves the existing ~12 comments-per-screen scanning density.
+
+   Class hooks are unprefixed (`.card`, `.list`, `.list-item`, `.group-head`,
+   `.path`, `.ti`) because the e2e suite targets them as raw structural
+   selectors. See tests/e2e/sidebar-triage.spec.ts and triage-statuses.spec.ts.
+
+   Card chrome is sourced from SDS surface + border tokens with raw pixel
+   fallbacks so the dashboard still renders if the theme block ever fails to
+   load. */
+
+.card {
+  background: var(--sds-color-background-default-default, #ffffff);
+  border: 1px solid var(--sds-color-border-default-default, #e6e6e6);
+  border-radius: var(--sds-size-radius-200, 8px);
+  box-shadow: var(--sds-effect-shadow-100, 0 1px 2px rgba(0, 0, 0, 0.04));
+}
+.list {
+  display: flex;
+  flex-direction: column;
+}
+.list-empty {
+  padding: var(--sds-size-space-800, 32px);
+  text-align: center;
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+  font: var(--sds-font-body-base, 400 14px sans-serif);
+}
+/* Row container is a real <button> (a11y: avoids axe nested-interactive
+   when an inline page-URL link sits inside the row meta). Reset the UA
+   button styles so the row reads visually as a list item. */
+.list-item {
+  /* Compact density: padding 8px (space-200) vertical, 12px (space-300)
+     horizontal — keeps row height around 56px so ~12 fit per screen. */
+  padding: var(--sds-size-space-200, 8px) var(--sds-size-space-300, 12px);
+  border-bottom: 1px solid var(--sds-color-border-default-secondary, rgba(0, 0, 0, 0.06));
+  cursor: pointer;
+  display: flex;
+  gap: var(--sds-size-space-300, 12px);
+  align-items: flex-start;
+  /* Reset native <button> chrome */
+  background: transparent;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.list-item:last-child {
+  border-bottom: 0;
+}
+.list-item:hover {
+  background: var(--sds-color-background-default-secondary, #fafafa);
+}
+.list-item:focus-visible {
+  outline: 2px solid var(--sds-color-border-brand-default, #1a1a1a);
+  outline-offset: -2px;
+}
+.list-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--sds-color-background-brand-default, #1a1a1a);
+  color: var(--sds-color-text-brand-on-brand, #ffffff);
+  font: 600 11px var(--sds-font-family-base, system-ui, sans-serif);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.list-item.is-closed .list-num {
+  background: var(--sds-color-background-neutral-secondary, #b5b5b5);
+}
+.list-body {
+  flex: 1;
+  min-width: 0;
+}
+/* `.ti` is the title; tests use `.list-item .ti` to read row text. */
+.ti {
+  /* 13px is intentional — between body-small (12) and body-base (14).
+     Preserves existing scanning density (Stage 3 amendment). */
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--sds-color-text-default-default, #1a1a1a);
+  margin-bottom: 2px;
+  word-break: break-word;
+  /* Multi-line clamp keeps long change_text from blowing out row height —
+     the row stays at the compact ~56px target. The full text remains
+     readable on the detail route. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.list-meta {
+  /* Secondary text colour comes from the dashboard's app.css override
+     of --sds-color-text-default-secondary (gray-600 instead of the
+     SDS default gray-500) so it passes WCAG AA contrast on white. */
+  font: var(--sds-font-body-small, 400 12px sans-serif);
+  color: var(--sds-color-text-default-secondary, #444444);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.list-meta-url {
+  /* The page URL pathname renders as static text now (was an <a> link;
+     removed to fix axe nested-interactive on the row button). */
+  text-decoration: underline;
+  text-decoration-color: var(--sds-color-border-default-default, #e6e6e6);
+  text-underline-offset: 2px;
+}
+
+/* Page grouping. Header is a button so users can collapse/expand entire
+   groups; the chevron rotates rather than swapping glyphs. */
+.group {
+  margin-bottom: var(--sds-size-space-300, 12px);
+}
+.group:last-child {
+  margin-bottom: 0;
+}
+.group-head {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--sds-size-space-200, 8px);
+  padding: var(--sds-size-space-200, 8px) var(--sds-size-space-300, 12px);
+  background: transparent;
+  border: 0;
+  border-radius: var(--sds-size-radius-100, 4px);
+  cursor: pointer;
+  font: 500 12px var(--sds-font-family-base, system-ui, sans-serif);
+  color: var(--sds-color-text-default-default, #1a1a1a);
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.group-head:hover {
+  background: var(--sds-color-background-default-secondary, #f3f3f3);
+}
+.group-chev {
+  transition: transform 120ms ease;
+}
+.group-head[aria-expanded="false"] .group-chev {
+  transform: rotate(-90deg);
+}
+.group-head .path {
+  color: var(--sds-color-text-default-default, #1a1a1a);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  font-size: 13px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-count {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--sds-color-background-default-secondary, #e8e8e8);
+  color: var(--sds-color-text-default-secondary, #444444);
+}
+.group-head + .card.list {
+  margin-top: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group-chev {
+    transition: none;
+  }
+}

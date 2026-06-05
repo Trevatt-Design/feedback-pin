@@ -1,0 +1,67 @@
+/* Project-level dashboard app styles.
+
+   The vendored SDS theme.css already sets `color-scheme: light` on
+   :root and ships the full token suite. This file only adds the body
+   background, root font stack, and the keyboard-focus reset for
+   <main tabindex="-1">. Anything design-system-y belongs in theme.css
+   or a component CSS file; this file stays small. */
+
+:root {
+  color-scheme: light;
+
+  /* Override SDS `text-default-secondary` from gray-500 (#757575) to
+     gray-600 (#444444). SDS's default secondary text contrasts at
+     ~4.48:1 on pure white, which falls just below WCAG AA's 4.5:1
+     threshold and was flagged by axe (`color-contrast`, serious) on
+     the comments-list <p className="fp-h-sub">. Gray-600 lifts every
+     surface that consumes the secondary token (subtitle, list-meta,
+     panel labels, eyebrow text) to ~9.7:1 in one place rather than
+     patching each call site. The visual register stays "quiet
+     subtitle" — the bump is small enough to be imperceptible at body
+     sizes but lands the contrast above AA. */
+  --sds-color-text-default-secondary: var(--sds-color-gray-600, #444444);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--sds-color-background-default-secondary, #fafafa);
+  color: var(--sds-color-text-default-default, #1a1a1a);
+  font-family: var(
+    --sds-font-family-base,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif
+  );
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* `<main tabindex="-1">` lets us focus the landmark after a hash route
+   change without showing an outline (the route's heading is the visible
+   anchor). This matches the Stage 3 accessibility amendment. */
+main[tabindex="-1"]:focus,
+main[tabindex="-1"]:focus-visible {
+  outline: none;
+}
+
+/* `.fp-err` — inline error banner reused by Login, CommentsList, and
+   CommentDetail. Defined once here so the three routes can't drift. */
+.fp-err {
+  background: var(--sds-color-background-danger-tertiary, #fdecea);
+  color: var(--sds-color-text-danger-default, #8a1f12);
+  padding: var(--sds-size-space-200, 8px) var(--sds-size-space-300, 10px);
+  border-radius: var(--sds-size-radius-100, 6px);
+  font-size: 12px;
+}

@@ -1,0 +1,216 @@
+# invariants.map.yaml — maps manifest invariant names to source locations.
+#
+# Owned by the integrator agent (Stage 7) — appended to whenever a new
+# invariant is added to manifest.yaml. The Stage 0 drift check verifies
+# that every entry here still resolves: the file exists and the named
+# line is present.
+#
+# Backfilling is gradual: a missing entry is NOT a hard failure during the
+# transition window. Once an invariant has an entry here, it MUST stay
+# accurate — moving the code requires updating this file in the same
+# commit.
+#
+# Entry schema:
+#   <invariant-name>:
+#     at: "<path/from/repo/root>:<line-number>"      # file:line, primary anchor
+#     enforced_by: "test:<test-file-path>" | "code"  # what proves it
+#     notes: "<optional one-liner>"
+#
+# Example:
+#   default-mode-is-comment-on-load:
+#     at: "widget/src/ui.ts:122"
+#     enforced_by: "code"
+#     notes: "Constructor reads opts.defaultMode || 'comment'"
+
+invariants:
+  default-mode-is-comment-on-load:
+    at: "widget/src/ui.ts:136"
+    enforced_by: "code"
+    notes: "Constructor: const initial: Mode = opts.defaultMode || 'comment'"
+
+  os-cursor-not-overridden-in-comment-mode:
+    at: "widget/src/ui.ts:275-291"
+    enforced_by: "test:tests/e2e/cursor-badge.spec.ts"
+    notes: "setMode no longer assigns documentElement.style.cursor"
+
+  comment-mode-renders-badge-following-cursor:
+    at: "widget/src/ui.ts:363-387"
+    enforced_by: "test:tests/e2e/cursor-badge.spec.ts"
+    notes: "onPickMove updates cursorBadgeEl when stage = 'follow'"
+
+  badge-snaps-to-composer-on-open:
+    at: "widget/src/ui.ts:595"
+    enforced_by: "test:tests/e2e/cursor-badge.spec.ts"
+    notes: "openComposer ends with this.setCursorStage('snap')"
+
+  badge-hides-on-thread-open:
+    at: "widget/src/ui.ts:1095"
+    enforced_by: "test:tests/e2e/cursor-badge.spec.ts"
+    notes: "openThread calls setCursorStage('hidden')"
+
+  enter-submits-shift-enter-inserts-newline:
+    at: "widget/src/ui.ts:587-592"
+    enforced_by: "test:tests/e2e/composer.spec.ts"
+
+  submit-button-is-rounded-rectangle-not-circle:
+    at: "widget/src/styles.ts:366-374"
+    enforced_by: "test:tests/e2e/composer.spec.ts"
+    notes: ".fp-submit width/height/border-radius set to non-pill values"
+
+  scope-buttons-are-this-instance-and-site-wide-side-by-side:
+    at: "widget/src/ui.ts:455-458"
+    enforced_by: "test:tests/e2e/composer.spec.ts"
+
+  no-apply-to-label-on-scope-step:
+    at: "widget/src/ui.ts:455-458"
+    enforced_by: "test:tests/e2e/composer.spec.ts"
+    notes: "Verified by absence — readPanelState.applyToLabel must be false"
+
+  shake-warning-fires-from-any-step-with-uncommitted-text:
+    at: "widget/src/ui.ts:651-661"
+    enforced_by: "test:tests/e2e/composer.spec.ts"
+    notes: "tryDismissComposer reads liveInput.value before deciding"
+
+  hover-highlight-is-outline-only-no-fill:
+    at: "widget/src/styles.ts:256-262"
+    enforced_by: "code"
+    notes: ".fp-highlight has background: transparent; no box-shadow halo"
+
+  non-target-content-dimmed-via-spotlight-overlay-while-composing:
+    at: "widget/src/ui.ts:843-856"
+    enforced_by: "code"
+    notes: "showStickyHighlight mirrors rect onto spotlightEl"
+
+  text-on-highlight-background-is-white:
+    at: "widget/src/styles.ts:110,206,230,271,297,309,508,530,573"
+    enforced_by: "code"
+    notes: "Multiple rules have color: #fff on var(--fp-hl) backgrounds"
+
+  thread-opens-in-view-mode-by-default:
+    at: "widget/src/ui.ts:1086-1088"
+    enforced_by: "test:tests/e2e/thread-view-edit.spec.ts"
+    notes: "openThread resets threadMode to 'view' when activeId changes"
+
+  edit-button-renders-only-for-author:
+    at: "widget/src/ui.ts:1177"
+    enforced_by: "test:tests/e2e/thread-view-edit.spec.ts"
+
+  edit-mode-renders-cancel-and-save:
+    at: "widget/src/ui.ts:1109-1112"
+    enforced_by: "test:tests/e2e/thread-view-edit.spec.ts"
+
+  edit-form-fields-are-fully-clickable-via-label-wrapper:
+    at: "widget/src/ui.ts:1115-1126"
+    enforced_by: "test:tests/e2e/thread-view-edit.spec.ts"
+    notes: "Each .fp-edit-field is a <label> wrapping its textarea/checkbox"
+
+  closing-thread-resets-mode-to-view:
+    at: "widget/src/ui.ts:1314-1316"
+    enforced_by: "code"
+    notes: "closeActive sets this.threadMode = 'view'"
+
+  icon-only-buttons-have-title-attribute:
+    at: "tests/e2e/thread-view-edit.spec.ts:200-217"
+    enforced_by: "test:tests/e2e/thread-view-edit.spec.ts"
+    notes: "Cross-cutting universal rule; the test scans every button in the shadow DOM"
+
+  viewport-segment-rendered-in-right-cluster-after-spacer:
+    at: "dashboard/worker/reviewHtml.ts:829-838"
+    enforced_by: "test:tests/e2e/wrapper.spec.ts"
+    notes: "Spacer div (line 829) is followed by DeviceSeg + WidthInput + PresetSelect in the right cluster"
+
+  toolbar-button-widths-stable-across-state-toggles:
+    at: "dashboard/worker/reviewHtml.ts:151"
+    enforced_by: "test:tests/e2e/wrapper.spec.ts"
+    notes: ".btn-toolbar { min-width: 180px; justify-content: center }"
+
+  sidebar-overlays-canvas-without-reflowing-iframe:
+    at: "dashboard/worker/reviewHtml.ts:189-205"
+    enforced_by: "test:tests/e2e/wrapper.spec.ts"
+    notes: ".sidebar position: absolute + transform; iframe never reflows on toggle"
+
+  # ─── design-system-sds invariants ─────────────────────────────────────────
+  sds-vendored-mit-license-shipped:
+    at: "dashboard/web/src/sds/LICENSE"
+    enforced_by: "test:tests/unit/sds-contracts.test.ts"
+    notes: "PROVENANCE.md records upstream commit be440d8…, retrieval date, and vendored file list"
+
+  dashboard-built-from-sds-primitives:
+    at: "dashboard/web/src/sds/ui/primitives/index.ts"
+    enforced_by: "test:tests/e2e/dashboard-sds-render.spec.ts"
+    notes: "Routes import Button/Input/Tag/Textarea/etc. from primitives; sidebar tabs and status select are documented native deviations"
+
+  dashboard-status-select-is-native:
+    at: "dashboard/web/src/routes/CommentDetail.tsx:250-252"
+    enforced_by: "test:tests/e2e/triage-statuses.spec.ts"
+    notes: "Native <select id='fp-status-select'> so Playwright can read <option> values directly"
+
+  dashboard-sidebar-tabs-are-native:
+    at: "dashboard/web/src/components/Sidebar.tsx:53-78"
+    enforced_by: "test:tests/e2e/dashboard-sds-render.spec.ts"
+    notes: "Native <button class='tab'> with role='tab'; RAC autogenerated ids would fail axe aria-valid-attr-value"
+
+  widget-styles-sourced-from-sds-tokens:
+    at: "widget/src/tokens.ts"
+    enforced_by: "test:tests/unit/sds-contracts.test.ts"
+    notes: "All :root selectors rewritten to :host; no prefers-color-scheme dark block"
+
+  no-cdn-react-in-dashboard-spa:
+    at: "dashboard/web/src/"
+    enforced_by: "code"
+    notes: "grep -r 'esm.sh' dashboard/web/src returns zero matches; /review wrapper at dashboard/worker/reviewHtml.ts is the documented exception"
+
+  wrangler-serves-vite-built-assets:
+    at: "dashboard/wrangler.toml:14-18"
+    enforced_by: "code"
+    notes: "[assets] directory = web/dist, run_worker_first = true"
+
+  dashboard-bundle-budget:
+    at: "dashboard/web/scripts/check-bundle.mjs"
+    enforced_by: "code"
+    notes: "Build script enforces JS gzipped ≤ 200 kB; CSS gzipped ≤ 100 kB"
+
+  widget-does-not-import-dashboard-sds:
+    at: "widget/scripts/check-no-cross-import.mjs"
+    enforced_by: "code"
+    notes: "Runs as widget prebuild step"
+
+  dashboard-csp-strict-on-spa-relaxed-on-review:
+    at: "dashboard/worker/index.ts:31-66"
+    enforced_by: "code"
+    notes: "SPA: script-src 'self'. /review: script-src 'self' 'unsafe-inline' https://esm.sh; connect-src 'self' <api> https://esm.sh"
+
+  cursor-badge-remains-custom-consumes-sds-brand-token-only:
+    at: "widget/src/styles.ts:268-279"
+    enforced_by: "code"
+    notes: "20px circle, white interior; only background sourced from --fp-hl which resolves to SDS brand"
+
+  outline-only-highlight-consumes-sds-color-tokens-only-geometry-preserved:
+    at: "widget/src/styles.ts:256-262"
+    enforced_by: "code"
+    notes: ".fp-highlight border colour from --fp-hl (SDS); background: transparent and 2px geometry unchanged"
+
+  spotlight-overlay-consumes-sds-color-tokens-only-opacity-preserved:
+    at: "widget/src/styles.ts:285-291"
+    enforced_by: "code"
+    notes: "9999px box-shadow + ~45% black overlay rgba preserved verbatim from pre-SDS implementation"
+
+  submit-button-radius-mapped-to-sds-radius-200:
+    at: "widget/src/styles.ts:369"
+    enforced_by: "code"
+    notes: "border-radius: var(--sds-size-radius-200, 8px); SDS radius-200 = 0.5rem matches legacy hardcoded value"
+
+  dashboard-icon-button-wrapper-emits-aria-label-and-title:
+    at: "dashboard/web/src/components/IconButton.tsx:31-46"
+    enforced_by: "code"
+    notes: "Defaults title to aria-label so universal-rules invariant icon-only-buttons-have-title-attribute is enforced for SDS-driven dashboard buttons; currently no consumers"
+
+  widget-fonts-load-from-system-stack-only:
+    at: "widget/src/tokens.ts"
+    enforced_by: "code"
+    notes: "Widget never loads remote fonts; system stack baked into --sds-font-family-default"
+
+  dashboard-fonts-self-hosted-via-fontsource-not-google:
+    at: "dashboard/web/src/main.tsx:14-18"
+    enforced_by: "code"
+    notes: "@fontsource/inter weights 400/500/600/700 + @fontsource/roboto-mono 400 imported at SPA entry"

@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fp-feature pipeline</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --surface-2: #fafaf8;
+    --border: #e6e6e0;
+    --border-strong: #c9c9c0;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --muted-2: #8b8b8b;
+
+    --c-skill: #2563EB;
+    --c-skill-bg: #eaf0ff;
+    --c-agent: #10B981;
+    --c-agent-bg: #e7f7f1;
+    --c-inline: #6B7280;
+    --c-inline-bg: #efefee;
+    --c-handback: #D97706;
+    --c-handback-bg: #fdf3e2;
+    --c-loop: #DC2626;
+    --c-loop-bg: #fdecea;
+    --c-output: #7c3aed;
+    --c-light: #0891b2;
+    --c-light-bg: #cffafe;
+
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 6px 24px rgba(0,0,0,0.05);
+    --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; background: #efeee9; padding: 1px 5px; border-radius: 4px; }
+
+  .page { max-width: 760px; margin: 0 auto; padding: 36px 28px 80px; }
+
+  h1 { margin: 0 0 24px; font-size: 22px; letter-spacing: -0.01em; font-weight: 600; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 28px;
+  }
+  .legend .item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); padding: 2px 8px; }
+  .legend .swatch { width: 10px; height: 10px; border-radius: 3px; }
+  .legend .item strong { color: var(--fg); font-weight: 600; }
+
+  .flow { display: flex; flex-direction: column; gap: 0; }
+
+  .conn {
+    height: 22px; width: 2px;
+    background: var(--border-strong);
+    align-self: center;
+    position: relative;
+  }
+  .conn::after {
+    content: "";
+    position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 50%) rotate(45deg);
+    width: 7px; height: 7px;
+    border-right: 2px solid var(--border-strong);
+    border-bottom: 2px solid var(--border-strong);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px 16px;
+    box-shadow: var(--shadow);
+  }
+  .card-head {
+    display: flex; align-items: baseline; gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .card-stage {
+    display: inline-block;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--fg); color: #fff;
+    font-weight: 700; font-size: 12px;
+    text-align: center; line-height: 26px;
+    flex-shrink: 0;
+  }
+  .card-title { font-weight: 600; font-size: 16px; flex: 1; }
+  .card-tag {
+    font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .card-tag.skill { background: var(--c-skill-bg); color: var(--c-skill); }
+  .card-tag.agent { background: var(--c-agent-bg); color: var(--c-agent); }
+  .card-tag.inline { background: var(--c-inline-bg); color: var(--c-inline); }
+  .card-tag.handback { background: var(--c-handback-bg); color: var(--c-handback); }
+  .card-tag.trigger { background: #fff7e0; color: #8a6d00; }
+  .card-tag.classifier { background: var(--c-light-bg); color: var(--c-light); }
+
+  .card-purpose { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+  .card-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 18px;
+  }
+  @media (max-width: 700px) {
+    .card-body { grid-template-columns: 1fr; }
+  }
+  .card-block { border-left: 2px solid var(--border); padding: 2px 0 2px 12px; }
+  .card-block .label {
+    font: 600 10px var(--font);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted-2); margin-bottom: 4px;
+  }
+  .card-block ul { margin: 0; padding-left: 16px; color: var(--fg); font-size: 13px; }
+  .card-block ul li { margin-bottom: 2px; }
+  .card-block.reads { border-left-color: var(--c-skill); }
+  .card-block.writes { border-left-color: var(--c-output); }
+  .card-block.tools { border-left-color: var(--c-agent); }
+  .card-block.gates { border-left-color: var(--c-handback); }
+  .card-block.refuses { border-left-color: var(--c-loop); }
+  .card-block.runs { border-left-color: var(--muted); }
+
+  .parallel {
+    background: var(--surface-2);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    position: relative;
+  }
+  .parallel-label {
+    position: absolute; top: -10px; left: 18px;
+    background: var(--bg);
+    color: var(--muted-2);
+    font: 600 10px var(--font);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 0 8px;
+  }
+  .parallel-grid { display: grid; gap: 12px; }
+  .parallel.s3 .parallel-grid { grid-template-columns: repeat(4, 1fr); }
+  .parallel.s6 .parallel-grid { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 800px) {
+    .parallel.s3 .parallel-grid { grid-template-columns: 1fr 1fr; }
+    .parallel.s6 .parallel-grid { grid-template-columns: 1fr; }
+  }
+  .mini {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+  }
+  .mini h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+  .mini h4 .badge {
+    font: 600 10px var(--font); text-transform: uppercase; letter-spacing: 0.04em;
+    background: var(--c-skill-bg); color: var(--c-skill);
+    padding: 1px 6px; border-radius: 999px; margin-left: 6px;
+    vertical-align: middle;
+  }
+  .mini p { margin: 0; color: var(--muted); font-size: 12px; }
+
+  .card.trigger { background: #fffaf0; border-color: #eed7a4; }
+  .card.context { background: var(--surface-2); }
+  .card.handback { background: var(--c-handback-bg); border-color: #f4d18d; }
+  .card.driftgate { background: var(--c-loop-bg); border-color: #f0b8b3; }
+
+  .pill {
+    display: inline-block; padding: 1px 8px;
+    border-radius: 999px; background: var(--surface-2);
+    border: 1px solid var(--border);
+    font: 500 11px var(--font);
+    color: var(--fg);
+  }
+  .pill.warn { background: var(--c-handback-bg); color: var(--c-handback); border-color: #f0d8a0; }
+  .pill.fail { background: var(--c-loop-bg); color: var(--c-loop); border-color: #f0b8b3; }
+  .pill.light { background: var(--c-light-bg); color: var(--c-light); border-color: #93c5d9; }
+
+  .skipped-banner {
+    display: inline-block;
+    font: 600 10px var(--font); text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--c-light); background: #fff;
+    padding: 2px 8px; border-radius: 999px;
+    margin-bottom: 10px;
+    border: 1px solid var(--c-light);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>fp-feature pipeline</h1>
+
+<div class="legend">
+  <div class="item"><span class="swatch" style="background: var(--c-skill);"></span><strong>Skill</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-agent);"></span><strong>Agent</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-inline);"></span><strong>Inline</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-handback);"></span><strong>Hand back</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-loop);"></span><strong>Loop</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-output);"></span><strong>Artifact</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-light);"></span><strong>Lightweight branch</strong></div>
+</div>
+
+<div class="flow">
+
+  <div class="card trigger">
+    <div class="card-head">
+      <span class="card-stage" style="background: #8a6d00;">▶</span>
+      <span class="card-title">Trigger — user brief</span>
+      <span class="card-tag trigger">trigger</span>
+    </div>
+    <p class="card-purpose">Any request that adds, changes, or removes functionality.</p>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="card context">
+    <div class="card-head">
+      <span class="card-stage" style="background: var(--c-inline);">0</span>
+      <span class="card-title">Pre-flight — load context (orchestrator only)</span>
+      <span class="card-tag inline">inline</span>
+    </div>
+    <p class="card-purpose">Read once at orchestrator startup. Subagents receive only the excerpts they need — touched-surface manifest entries + anti-features + 1-line strategy summary.</p>
+    <div class="card-body">
+      <div class="card-block reads">
+        <div class="label">Reads</div>
+        <ul>
+          <li><code>manifest.yaml</code></li>
+          <li><code>decisions/&lt;current-month&gt;.log</code></li>
+          <li><code>invariants.map.yaml</code></li>
+          <li><code>followups.yaml</code></li>
+          <li><code>PLAN.md</code> · <code>PLAN-v2.md</code></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="card driftgate">
+    <div class="card-head">
+      <span class="card-stage" style="background: var(--c-loop);">0</span>
+      <span class="card-title">Pre-flight drift check</span>
+      <span class="card-tag handback">gate</span>
+    </div>
+    <p class="card-purpose">Verify the manifest reflects the code that's actually shipped before the pipeline starts.</p>
+    <div class="card-body">
+      <div class="card-block reads">
+        <div class="label">Checks</div>
+        <ul>
+          <li>Every <code>invariants.map.yaml</code> entry resolves</li>
+          <li>Every <code>features[*].tests</code> path exists</li>
+          <li>Every <code>features[*].surface</code> resolves</li>
+          <li>No anti-feature pattern in code</li>
+        </ul>
+      </div>
+      <div class="card-block gates">
+        <div class="label">Gate</div>
+        <ul>
+          <li>Drift detected → <span class="pill warn">HAND BACK</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="card-stage">1</span>
+      <span class="card-title">Brief intake</span>
+      <span class="card-tag skill">skill: shape</span>
+    </div>
+    <p class="card-purpose">Restate need, identify surfaces, list edge cases, surface open questions.</p>
+    <div class="card-body">
+      <div class="card-block gates">
+        <div class="label">Gate</div>
+        <ul><li>Blocking gaps → <span class="pill warn">HAND BACK</span></li></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="card-stage" style="background: var(--c-light);">1b</span>
+      <span class="card-title">Weight classification</span>
+      <span class="card-tag classifier">classifier</span>
+    </div>
+    <p class="card-purpose">Decide <span class="pill light">lightweight</span> or <span class="pill">full</span>. Default is full unless ALL lightweight criteria hold.</p>
+    <div class="card-body">
+      <div class="card-block reads">
+        <div class="label">Lightweight criteria (ALL must hold)</div>
+        <ul>
+          <li>Touched files limited to <code>*styles.ts</code>, image / SVG assets, single-token swaps, or copy strings inside existing markup</li>
+          <li>No new manifest contract</li>
+          <li>No existing invariant removed</li>
+          <li>No new endpoint / schema / auth surface</li>
+        </ul>
+      </div>
+      <div class="card-block writes">
+        <div class="label">Lightweight skips</div>
+        <ul>
+          <li>Stage 3 (specialists) — replaced by inline checklist</li>
+          <li>Stage 6 (simplify + harden)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="card-stage">2</span>
+      <span class="card-title">Conflict scan</span>
+      <span class="card-tag inline">inline</span>
+    </div>
+    <p class="card-purpose">List existing contracts that change, anti-features the brief might violate, invariants that must be preserved.</p>
+    <div class="card-body">
+      <div class="card-block writes">
+        <div class="label">Output</div>
+        <ul><li>Short plan: contracts to change + new contracts to add</li></ul>
+      </div>
+      <div class="card-block gates">
+        <div class="label">Gate</div>
+        <ul><li>Anti-feature triggered → <span class="pill warn">HAND BACK</span></li></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="parallel s3">
+    <div class="parallel-label">Stage 3 — specialist review (parallel) — full weight only</div>
+    <span class="skipped-banner">SKIPPED on lightweight — replaced by inline checklist</span>
+    <div class="parallel-grid">
+      <div class="mini">
+        <h4>security-review <span class="badge">skill</span></h4>
+        <p>Auth gates, input validation, data leakage, dependency risk, secrets handling.</p>
+      </div>
+      <div class="mini">
+        <h4>audit <span class="badge">skill</span></h4>
+        <p>a11y, performance, responsive.</p>
+      </div>
+      <div class="mini">
+        <h4>adapt <span class="badge">skill</span></h4>
+        <p>Browser / device / viewport compatibility, iframe context, CORS.</p>
+      </div>
+      <div class="mini">
+        <h4>critique <span class="badge">skill</span></h4>
+        <p>UX coherence, copy clarity, audience fit.</p>
+      </div>
+    </div>
+    <div class="card-body" style="margin-top: 14px;">
+      <div class="card-block gates">
+        <div class="label">Gate</div>
+        <ul>
+          <li>Blocking findings → revise plan, <span class="pill fail">re-run stage 3</span></li>
+          <li>Non-blocking → engineer constraints</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="card-stage" style="background: var(--c-agent);">4</span>
+      <span class="card-title">Implementation — engineer</span>
+      <span class="card-tag agent">agent</span>
+    </div>
+    <p class="card-purpose">Write code only. Must return a structured <code>verify_before_fix</code> handoff when existing behaviour is modified.</p>
+    <div class="card-body">
+      <div class="card-block tools">
+        <div class="label">Tools</div>
+        <ul><li>Read · Edit · Write · Bash · Grep · Glob</li></ul>
+      </div>
+      <div class="card-block writes">
+        <div class="label">Writes</div>
+        <ul>
+          <li><code>widget/src/**</code></li>
+          <li><code>api/src/**</code></li>
+          <li><code>dashboard/src/**</code></li>
+        </ul>
+      </div>
+      <div class="card-block runs">
+        <div class="label">Runs</div>
+        <ul><li><code>npx tsc --noEmit</code></li></ul>
+      </div>
+      <div class="card-block refuses">
+        <div class="label">Refuses</div>
+        <ul>
+          <li><code>EnterPlanMode</code></li>
+          <li>Edits to <code>manifest.yaml</code></li>
+          <li>Edits to test files</li>
+          <li>Anti-features</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="card-stage" style="background: var(--c-agent);">5</span>
+      <span class="card-title">Tests — test</span>
+      <span class="card-tag agent">agent</span>
+    </div>
+    <p class="card-purpose">Mirror every contract, cover every invariant, cover unhappy paths.</p>
+    <div class="card-body">
+      <div class="card-block writes">
+        <div class="label">Writes</div>
+        <ul>
+          <li><code>tests/unit/**</code> — Vitest</li>
+          <li><code>tests/api/**</code> — Vitest + miniflare</li>
+          <li><code>tests/e2e/**</code> — Playwright</li>
+        </ul>
+      </div>
+      <div class="card-block runs">
+        <div class="label">Runs</div>
+        <ul><li><code>npm test</code> — must be green</li></ul>
+      </div>
+      <div class="card-block gates">
+        <div class="label">Gate</div>
+        <ul><li>Suite red → <span class="pill fail">back to engineer</span></li></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="parallel s6">
+    <div class="parallel-label">Stage 6 — quality pass (parallel) — full weight only</div>
+    <span class="skipped-banner">SKIPPED on lightweight</span>
+    <div class="parallel-grid">
+      <div class="mini">
+        <h4>simplify <span class="badge">skill</span></h4>
+        <p>Reuse, dead code, repeated patterns.</p>
+      </div>
+      <div class="mini">
+        <h4>harden <span class="badge">skill</span></h4>
+        <p>Production-grade error states, edge cases, empty states.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="card-stage" style="background: var(--c-agent);">7</span>
+      <span class="card-title">Integrator</span>
+      <span class="card-tag agent">agent</span>
+    </div>
+    <p class="card-purpose">Final accounting + bookkeeping. Cannot edit code or tests.</p>
+    <div class="card-body">
+      <div class="card-block writes">
+        <div class="label">Writes / appends</div>
+        <ul>
+          <li><code>manifest.yaml</code></li>
+          <li><code>invariants.map.yaml</code></li>
+          <li><code>decisions/&lt;current-month&gt;.log</code></li>
+          <li><code>followups.yaml</code></li>
+          <li><code>reports/&lt;YYYY-MM-DD&gt;-&lt;feature-id&gt;.md</code></li>
+        </ul>
+      </div>
+      <div class="card-block runs">
+        <div class="label">Runs</div>
+        <ul>
+          <li>Final test suite — only if Stage 6 modified code</li>
+          <li>Drift check</li>
+          <li>Preview deploy if configured</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="card-stage">8</span>
+      <span class="card-title">Final review</span>
+      <span class="card-tag skill">skill: review</span>
+    </div>
+    <p class="card-purpose">Last gate before user hand-back.</p>
+  </div>
+
+  <div class="conn"></div>
+
+  <div class="card handback">
+    <div class="card-head">
+      <span class="card-stage" style="background: var(--c-handback);">9</span>
+      <span class="card-title">Hand back to user</span>
+      <span class="card-tag handback">hand back</span>
+    </div>
+    <div class="card-body">
+      <div class="card-block writes">
+        <div class="label">Returns</div>
+        <ul>
+          <li>Summary + verification report</li>
+          <li>Pipeline weight (lightweight / full)</li>
+          <li>Preview URL if available</li>
+          <li>New <code>followups.yaml</code> entries opened</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+</body>
+</html>

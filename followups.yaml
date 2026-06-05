@@ -1,0 +1,282 @@
+# followups.yaml — open deferred items + interim-decision review queue.
+#
+# Owned by the integrator agent (Stage 7). Read by the orchestrator at
+# Stage 1 so related items are surfaced when a new brief lands in the
+# same area.
+#
+# Entry schema:
+#   - id: short-kebab-id        # unique within this file
+#     opened_on: YYYY-MM-DD
+#     kind: deferred_fix         # one of: deferred_fix | interim_review | drift_repair | doc_drift
+#                                # deferred_fix    = a known-good fix the pipeline didn't ship this batch
+#                                # interim_review  = a decision marked "interim/temporary"; revisit at review_after
+#                                # drift_repair    = manifest is stale relative to code (caught by drift check)
+#                                # doc_drift       = docs reference outdated info
+#     severity: low | medium | high
+#     summary: "One sentence describing the issue."
+#     blocked_on: <free text>    # what's stopping us from doing it now (or null)
+#     originating_batch: <report path or "manual">
+#     review_after: YYYY-MM-DD   # only for kind: interim_review; integrator sets ~90 days out
+#     fix_one_liner: "..."       # optional; if the fix is one line of code, drop it here so future batches can pick it up cheaply
+#
+# Closing an item: delete the entry. The decisions log captures the close
+# event ("closed followup XYZ — fixed in batch ABC").
+
+followups:
+  - id: dashboard-stub-regex-bare-path
+    opened_on: 2026-04-30
+    kind: deferred_fix
+    severity: medium
+    summary: |
+      Dashboard's `api("/v1/comments")` (no query string) escapes the test
+      stub in tests/e2e/sidebar-triage.spec.ts because the regex requires
+      `?` after `comments`. f1/f2 silently hit the real D1 once data
+      accumulates; we work around by clearing D1 manually each test run.
+    blocked_on: null
+    originating_batch: reports/2026-04-30-batch-d-view-edit-tooltips.md
+    fix_one_liner: |
+      Update the regex in stubDashboardApi (around tests/e2e/sidebar-triage.spec.ts:349) from
+      "/v1/comments\\?.*" to "/v1/comments(\\?.*)?$" so it also catches the bare path.
+
+  - id: smoke-test-port-drift
+    opened_on: 2026-04-29
+    kind: doc_drift
+    severity: low
+    summary: |
+      smoke-test/README.md and the footer in smoke-test/index.html both
+      reference the dashboard at :8788, but the actual dashboard worker
+      runs on :8789 (matches playwright.config.ts).
+    blocked_on: user-declined-for-now
+    originating_batch: manual
+    fix_one_liner: |
+      sed -i '' 's|localhost:8788|localhost:8789|g' smoke-test/README.md smoke-test/index.html
+
+  - id: interim-blue-highlight-revisit
+    opened_on: 2026-04-29
+    kind: interim_review
+    severity: low
+    summary: |
+      The chartreuse #C7FF00 → primary blue #2563EB swap was explicitly
+      flagged as interim ("may change in brand pass"). Revisit during
+      brand pass; either promote to permanent or replace.
+    blocked_on: brand-pass-not-yet-scheduled
+    originating_batch: reports/2026-04-29-batch-a-visual-theme.md
+    review_after: 2026-07-29
+
+  - id: integration-tests-still-hit-live-wrangler
+    opened_on: 2026-04-30
+    kind: deferred_fix
+    severity: medium
+    summary: |
+      tests/api/*.test.ts hit the live wrangler dev server at :8787 instead
+      of using miniflare/unstable_dev for hermetic isolation. Manifest
+      flagged this as a pending migration ages ago.
+    blocked_on: null
+    originating_batch: manual
+    fix_one_liner: |
+      Migrate tests/api/comments.test.ts and tests/api/inference.test.ts to
+      use unstable_dev() per Cloudflare workers-types docs.
+
+  - id: cursor-tip-pixel-invariant-stale
+    opened_on: 2026-04-30
+    kind: drift_repair
+    severity: low
+    summary: |
+      Manifest entry widget-mode-toggle no longer carries the
+      cursor-tip-pixel-equals-css-hotspot invariant (Batch E.2 replaced
+      the cursor with a follower badge — no more CSS cursor override).
+      Confirm any references to the old invariant in tests/docs are gone.
+    blocked_on: null
+    originating_batch: reports/2026-04-30-batch-e2-cursor-badge-lifecycle.md
+    fix_one_liner: |
+      grep -r "cursor-tip-pixel-equals-css-hotspot" . --exclude-dir=node_modules
+
+  - id: wrapper-widthinput-debounce-flake
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: low
+    summary: |
+      The WidthInput debounce family in tests/e2e/viewport-controls.spec.ts
+      is intermittently flaky in full-suite runs but passes 3/3 in
+      isolation. The dashboard/worker/reviewHtml.ts WidthInput logic was a
+      verbatim port from the previous monolith and was NOT modified by the
+      design-system-sds pipeline; the flake is pre-existing test-infra
+      timing variance. Currently masked by playwright.config.ts retries: 1.
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+    fix_one_liner: |
+      Already mitigated by retries: 1 in playwright.config.ts. Real fix is
+      to investigate the debounce-vs-Playwright timing in reviewHtml.ts
+      WidthInput and either bump the debounce window or add an explicit
+      "settled" attribute the test can wait on.
+
+  - id: commentdetail-loading-text-no-spinner
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: low
+    summary: |
+      dashboard/web/src/routes/CommentDetail.tsx renders plain "Loading…"
+      text while fetching. SDS ships no spinner primitive in the vendored
+      set; harden left it as text rather than introducing a custom
+      decoration (which would conflict with af-brand-polish).
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+
+  - id: login-error-copy-raw-api-message
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: medium
+    summary: |
+      dashboard/web/src/routes/Login.tsx surfaces raw 401 / API error
+      messages directly to the user. Should sanitize to a user-readable
+      string ("Sign-in failed. Check your project token.") and log the raw
+      message to console for debugging.
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+
+  - id: signout-no-confirmation
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: low
+    summary: |
+      Sign-out button in dashboard/web/src/components/Sidebar.tsx clears
+      the project token from localStorage and redirects to /login with no
+      confirmation prompt. Destructive action without confirm.
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+
+  - id: sidebar-tab-aria-tablist-without-tabpanel
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: low
+    summary: |
+      The native <button class='tab' role='tab'> markup in
+      dashboard/web/src/components/Sidebar.tsx renders a `role="tablist"`
+      with no corresponding `role="tabpanel"` — the filtered list below is
+      structurally a tabpanel but isn't tagged. Manifest invariant
+      `dashboard-sidebar-tabs-are-native` documents the deviation; this
+      followup is the a11y completeness note.
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+
+  - id: login-route-no-main-landmark
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: low
+    summary: |
+      dashboard/web/src/routes/Login.tsx renders the form inside a <div>,
+      not a <main>. Engineer documented this as intentional (the route is
+      effectively the entire page). Flag for an explicit a11y waiver or
+      add a <main> wrapper.
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+
+  - id: dashboard-icon-button-wrapper-currently-unused
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: low
+    summary: |
+      dashboard/web/src/components/IconButton.tsx wraps the SDS IconButton
+      to default `title` to `aria-label`. The wrapper exists for future SDS
+      icon consumers but the current dashboard surface has no icon-only
+      buttons. Either remove the wrapper until the first consumer lands or
+      wait until then. simplify left it in place.
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+
+  - id: dashboard-eslint-rule-for-icon-title
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: low
+    summary: |
+      Universal-rules invariant `icon-only-buttons-have-title-attribute` is
+      currently enforced by a Playwright e2e scan and the IconButton
+      wrapper. There is no eslint config in the repo today, so we can't
+      enforce the rule at lint-time. Adding eslint + a custom rule would
+      catch new icon buttons that bypass the wrapper at PR time instead of
+      at e2e time.
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+
+  - id: sds-primitives-mostly-unused
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: low
+    summary: |
+      18 of 20 vendored SDS primitives have no consumer in the current
+      dashboard surface (Avatar, Dialog, Fieldset, Link, ListBox, Logo,
+      Menu, Notification, Search, Switch, Tooltip, ...). They are tree-
+      shaken at build time so there's no bundle impact, but they bloat the
+      vendored copy. Decide whether to trim the vendored set to the
+      consumed primitives or keep them all for future use.
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+
+  - id: dashboard-list-row-no-direct-url-link
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: low
+    summary: |
+      The inline page-URL anchor in .list-item rows was removed because
+      axe nested-interactive flagged the row-button + nested <a>. Users
+      who want to open the source page now have to click into the comment
+      detail first. UX trade-off — decide whether to reintroduce a
+      side-by-side URL link (outside the row button) or keep the
+      detail-panel link as the only path.
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+
+  - id: interim-color-secondary-token-override
+    opened_on: 2026-05-01
+    kind: interim_review
+    severity: low
+    summary: |
+      dashboard/web/src/app.css overrides --sds-color-text-default-secondary
+      from SDS gray-500 (#757575, 4.48:1 on white — fails AA at body sizes)
+      to gray-600 (#444, 9.7:1). May be reconsidered if SDS upstream fixes
+      its own contrast.
+    blocked_on: sds-upstream-contrast-fix
+    originating_batch: reports/2026-05-01-design-system-sds.md
+    review_after: 2026-07-30
+
+  - id: font-license-attribution-needs-shipping
+    opened_on: 2026-05-01
+    kind: drift_repair
+    severity: medium
+    summary: |
+      @fontsource/inter and @fontsource/roboto-mono ship as woff/woff2 in
+      dashboard/web/dist/assets/. Both are SIL OFL-1.1, which requires the
+      license to accompany the font files in any redistribution. Stage 8
+      review surfaced the gap; Stage 8 amendments added
+      dashboard/web/src/sds/THIRD-PARTY-LICENSES.md as the attribution
+      source. This followup tracks the operational follow-up of getting
+      that file into dist/ (currently it lives only in the source tree).
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+    fix_one_liner: |
+      Either copy dashboard/web/src/sds/THIRD-PARTY-LICENSES.md into dist/
+      during Vite build via vite-plugin-static-copy, or expose it through
+      a /licenses route from the worker.
+
+  - id: sds-invariant-test-coverage-backfill
+    opened_on: 2026-05-01
+    kind: deferred_fix
+    severity: low
+    summary: |
+      Stage 8 review found 6 design-system-sds invariants without direct
+      test assertions (currently code-review-enforced or build-time only):
+        - wrangler-serves-vite-built-assets (body-shape assertion missing)
+        - dashboard-bundle-budget (build-time, not test-time)
+        - widget-does-not-import-dashboard-sds (prebuild script, not test)
+        - spotlight-overlay-consumes-sds-color-tokens-only-opacity-preserved
+        - dashboard-icon-button-wrapper-emits-aria-label-and-title (no consumer yet)
+        - widget-fonts-load-from-system-stack-only
+        - dashboard-fonts-self-hosted-via-fontsource-not-google
+      Backfill direct assertions in tests/unit/sds-contracts.test.ts and/or
+      tests/e2e/dashboard-sds-render.spec.ts so they don't quietly drift.
+    blocked_on: null
+    originating_batch: reports/2026-05-01-design-system-sds.md
+    fix_one_liner: |
+      Each invariant has a 1-3 line test: grep widget/src/styles.ts for the
+      spotlight rule literal; grep dashboard build for googleapis URL; check
+      dist/index.html shape matches the Vite shell; etc.

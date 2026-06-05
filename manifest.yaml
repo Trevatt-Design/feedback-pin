@@ -1,0 +1,884 @@
+# feedback-pin manifest — the single source of truth.
+#
+# Owned by the integrator agent at the end of every fp-feature run.
+# Do not edit by hand except to (a) revise strategy, (b) add an anti-feature,
+# (c) record a deliberate strategic pivot. Anything else goes through fp-feature.
+
+strategy:
+  north_star: "In-situ feedback that survives layout changes and produces structured input for designers."
+  audiences:
+    - id: commenter
+      role: "End client leaving feedback on a page they didn't build"
+      primary_surface: widget
+    - id: reviewing-designer
+      role: "Designer triaging feedback during a review session"
+      primary_surface: wrapper
+    - id: designer-buyer
+      role: "Designer evaluating feedback-pin to use on their projects"
+      primary_surface: dashboard
+  phase: wireframe-as-code
+  ui_vocabulary: |
+    Figma's Simple Design System (SDS) is the canonical UI vocabulary for
+    every surface. The dashboard consumes SDS primitives directly from the
+    vendored copy at `dashboard/web/src/sds/`; the widget consumes SDS at
+    the token level via `widget/src/tokens.ts` (scoped to `:host` for
+    shadow-DOM isolation). Ad-hoc styling outside this vocabulary — bespoke
+    component CSS that doesn't reach for an SDS token, primitive, or
+    documented deviation — is not permitted. New surfaces start by reaching
+    for an SDS primitive; deviations require a manifest invariant explaining
+    why.
+
+# ─── Anti-features ────────────────────────────────────────────────────────────
+# Any brief that triggers one of these returns to the user as a conflict.
+anti-features:
+  - id: af-cms-edit
+    statement: "Auto-edit the host site's DOM or content"
+    rationale: "Edit was the original idea that made the product too complex; comment-first is the wedge"
+  - id: af-accounts
+    statement: "Per-user accounts and authentication for commenters"
+    rationale: "Anon-id is sufficient for v1; account systems delay shipping"
+  - id: af-ai-auto-edit
+    statement: "AI mutating the host site's DOM, content, or styles directly"
+    rationale: "AI is allowed for inference and clarification of intent at capture time, but never for changing the host site"
+  - id: af-brand-polish
+    statement: "No decoration beyond what SDS ships. No custom illustration. No motion beyond what SDS conventions imply."
+    rationale: "SDS is the canonical UI vocabulary in this phase; bespoke decoration, custom illustration, and gratuitous motion drift the surface away from the design system and create maintenance burden the wireframe-as-code phase explicitly defers. Brand pass — if and when it happens — lands as a deliberate strategic pivot, not as ad-hoc polish baked into individual features."
+  - id: af-i18n
+    statement: "Internationalisation and localisation"
+    rationale: "Out of scope for v1; English-only is fine"
+  - id: af-realtime-collab
+    statement: "Real-time collaborative cursors / presence indicators"
+    rationale: "Comments and replies are async; presence is later if needed"
+
+# ─── Features ─────────────────────────────────────────────────────────────────
+features:
+  # Widget surface
+  - id: widget-mode-toggle
+    surface: widget
+    contract: |
+      Two modes: comment (default), browse. C key toggles. Mode is mirrored
+      to the wrapper via postMessage.
+
+      Cursor behaviour: the OS cursor stays default in both modes (no CSS
+      `cursor: url(...)` override). In Comment mode a small floating badge
+      is rendered alongside the cursor as a mode indicator. The badge has
+      three lifecycle stages:
+
+        follow  — Default in Comment mode while no panel is open. The badge
+                  follows mousemove with a `+14, +14` offset (bottom-right
+                  of the cursor). Hidden while the cursor is over widget
+                  chrome (toggle, sidebar) so it doesn't compete with those
+                  controls.
+
+        snap    — When the composer opens (a target was clicked), the badge
+                  transitions (~180ms) from its last cursor position to a
+                  fixed point at the top-left of the composer panel,
+                  straddling the border. It sits there for the entire
+                  composing flow, signalling "this comment lives here".
+
+        hidden  — When an existing-comment thread is open (the existing pin
+                  already marks the anchor), or when Browse mode is active.
+
+      On comment submission, the badge fades out over ~150ms while the new
+      `.fp-pin` renders at the element's anchor (different position, so
+      it's a cross-fade rather than a position morph). Visual continuity
+      is the shape and colour: same filled blue circle, white interior,
+      "+" sign while it's a badge, comment number once it becomes a pin.
+    invariants:
+      - default-mode-is-comment-on-load
+      - c-key-toggles-when-no-input-focused
+      - os-cursor-not-overridden-in-comment-mode
+      - comment-mode-renders-badge-following-cursor
+      - badge-snaps-to-composer-on-open
+      - badge-hides-on-thread-open
+      - badge-fades-out-on-submit
+      - badge-hides-while-cursor-over-widget-chrome
+      - cursor-badge-remains-custom-consumes-sds-brand-token-only
+    tests:
+      - tests/e2e/cursor-badge.spec.ts
+    conflicts-with: []
+
+  - id: widget-composer
+    surface: widget
+    contract: |
+      Click an element to open a minimal composer near it. The sticky highlight
+      on the selected element is the only chrome confirming the target — no
+      header, no title, no close button, no step indicator.
+
+      When the composer opens, a "spotlight" overlay also activates: a fixed-
+      position element painted over the entire viewport via a 9999px box-
+      shadow spread, with its rect set to the target's bounding box so the
+      target stays bright while the rest of the page dims (~45% black).
+      Widget chrome (mode toggle, sidebar, pins, composer panel) renders
+      above the spotlight in document order, so it stays visible on top.
+
+      The hover highlight (during target picking) is outline-only — a 2px
+      coloured stroke, no fill, no halo — so it reads as a hover indicator
+      without flooding the host page tone. The sticky highlight on the
+      selected target is also outline-only; the spotlight provides the
+      "selected" visual emphasis instead of a fill.
+
+      Any text or icon rendered on a solid highlight-colour background uses
+      `#fff` (white). The blue is too dark for `#1a1a1a` text at the size
+      of pins, tags, and count badges. This applies across all surfaces.
+
+      Steps:
+        Step 1 — placeholder "Add comment". Submit affordance is a small
+                 right-arrow inside a rounded-rectangle button at the bottom
+                 right of the textarea. Advances to step 2.
+        Step 2 — previous answer rendered above as inline-editable text (no
+                 label; placeholder reappears only when the field is emptied).
+                 Current input is "Why?" with right-arrow (when step 3 will
+                 follow) or up-arrow (when this is the last input).
+        Clarify (optional, AI-driven) — single question + 2-3 option pills,
+                 only shown when /v1/inference returns confidence < 0.7.
+        Step 3 — scope picker (only shown when cohort > 1 OR the style-target
+                 is a style anchor). Previous answers shown above as inline-
+                 editable text. Two scope buttons rendered side by side:
+                 "This instance" (default, on) and "Site-wide". No question
+                 label above them.
+
+      Keyboard: Enter in either textarea submits/advances. Shift+Enter inserts
+      a newline. Cmd/Ctrl+Enter is also accepted as a familiar alias.
+
+      Both Comment and Why are mandatory. All previous answers in any step
+      are inline-editable: clicking the rendered text turns it into an
+      editable field; blur saves the edit into composer state.
+
+      Dismissal:
+        - Empty composer: any click outside the panel OR a single Esc dismisses
+          silently. "Empty" means no text in any field, including the live,
+          uncommitted textarea on the current step.
+        - Non-empty composer: first click outside (or first Esc) shakes the
+          panel; second click outside (or second Esc) dismisses. Shake state
+          resets after ~4s of no further attempt.
+
+      Style target = the only prominent style-anchor descendant if the clicked
+      element wraps exactly one (h1-h6, p, button, a, li); otherwise the
+      clicked element. Cohort signature = tag + first 1-2 meaningful
+      (non-utility) classes.
+    invariants:
+      - no-close-button-renders
+      - no-title-bar-renders
+      - no-step-dots
+      - both-fields-mandatory
+      - sticky-highlight-stays-while-composing
+      - hover-highlight-is-outline-only-no-fill
+      - non-target-content-dimmed-via-spotlight-overlay-while-composing
+      - text-on-highlight-background-is-white
+      - native-checkbox-must-not-render
+      - empty-clickaway-dismisses-silently
+      - textful-clickaway-shakes-then-dismisses-on-second
+      - shake-warning-fires-from-any-step-with-uncommitted-text
+      - esc-mirrors-clickaway-semantics
+      - previous-answers-shown-as-editable-text-without-labels
+      - submit-arrow-inline-and-direction-matches-context
+      - submit-button-is-rounded-rectangle-not-circle
+      - enter-submits-shift-enter-inserts-newline
+      - scope-step-only-shown-when-cohort-greater-than-1-or-style-anchor
+      - scope-buttons-are-this-instance-and-site-wide-side-by-side
+      - no-apply-to-label-on-scope-step
+      - scope-button-click-saves-comment
+      - style-target-prefers-single-style-anchor-descendant
+      - outline-only-highlight-consumes-sds-color-tokens-only-geometry-preserved
+      - spotlight-overlay-consumes-sds-color-tokens-only-opacity-preserved
+      - submit-button-radius-mapped-to-sds-radius-200
+    tests:
+      - tests/unit/cohort.test.ts
+      - tests/e2e/composer.spec.ts
+    conflicts-with: []
+
+  - id: widget-pins
+    surface: widget
+    contract: |
+      Each comment renders a numbered pin anchored to its element. Resolution
+      priority: stable selector → DOM path → coordinate fallback. Pin stays
+      anchored across scroll and most layout changes. Click a pin to open
+      its thread. Pins for comments whose status is `resolved` or `wont-fix`
+      get the `is-closed` CSS class for greyout (rendered via the runtime
+      `isClosedStatus()` helper, so the bucket is the single source of truth).
+
+      Thread is a two-mode state machine:
+
+        view (default — always entered first; opening a different thread
+              always resets to view): read-only display of Comment, Why, and
+              (only when site_wide is true) "Apply to: Site-wide". The top
+              action row holds a Status `<select>` listing all four states
+              (Open / In progress / Won't fix / Resolved); for the author,
+              it also holds an Edit (pencil) button and a Delete (trash)
+              button. Replies thread renders below; reply input is available.
+
+        edit (entered by the author clicking Edit): the top action row
+              changes to a Cancel + Save pair. The Status select, Delete
+              button, replies, and reply input are hidden. The body becomes
+              a form with two textareas (Comment, Why), pre-filled with the
+              current values, and a checkbox labelled "Site-wide". Each
+              field is wrapped in a `<label>` so the entire field area
+              (label + input box) is one click target. Cancel returns to
+              view (discarding edits). Save PATCHes the comment via the API
+              and returns to view.
+
+      Edit and Delete are gated to the author (anon-id match). Non-authors
+      see only the Status select in the top row.
+
+      Click outside the panel dismisses; closing also resets the thread back
+      to view mode for the next open.
+    invariants:
+      - pin-anchors-via-selector-when-unique
+      - pin-falls-back-to-coords-when-anchor-lost
+      - pin-renumbers-stably-by-creation-order
+      - thread-actions-at-top
+      - thread-opens-in-view-mode-by-default
+      - no-text-fields-contenteditable-in-view-mode
+      - edit-button-renders-only-for-author
+      - edit-and-delete-gated-to-author
+      - edit-mode-renders-cancel-and-save
+      - edit-mode-site-wide-is-checkbox
+      - edit-form-fields-are-fully-clickable-via-label-wrapper
+      - closing-thread-resets-mode-to-view
+      - thread-top-action-is-status-select-with-four-options
+      - closed-bucket-includes-resolved-and-wont-fix-for-greyout-and-tabs
+    tests:
+      - tests/e2e/thread-view-edit.spec.ts
+      - tests/e2e/triage-statuses.spec.ts
+    conflicts-with: []
+
+  - id: widget-sidebar-standalone
+    surface: widget
+    contract: |
+      When the widget is NOT in an iframe (auto-detected via window.self !== window.top),
+      a right-edge sidebar lists comments with filter tabs (Open / Resolved / All).
+      The Open tab buckets `open` + `in-progress`; the Resolved tab buckets
+      `resolved` + `wont-fix`. Each row displays a compact status pill (one
+      of four colour classes — `fp-status-open`, `fp-status-in-progress`,
+      `fp-status-wont-fix`, `fp-status-resolved`) and gets the `is-closed`
+      class for greyout when the status is `resolved` or `wont-fix`.
+      Per-row toggle button has been removed; status changes happen in the
+      thread top-row `<select>` instead. Per-item hover actions: edit own
+      (matching anon-id), delete own. Click row to open thread + scroll
+      element into view. The sidebar is hidden in headless mode.
+
+      A controls row above the list provides:
+        - Search input — case-insensitive substring filter over change_text,
+          why_text, and url. Empty query = no filter. Placeholder reads
+          "Search N comments…" where N is the visible count.
+        - Sort select — three options: newest (default), oldest, unresolved
+          first. Selection persists per-user via localStorage key `fp_sort`.
+          Corrupt or unknown stored values fall back to newest.
+
+      Three empty states:
+        - "No comments yet" when the project has zero comments.
+        - "No comments in this view." when the tab filter hides all.
+        - `No comments matching "<q>"` when search returns nothing.
+    invariants:
+      - sidebar-rendered-only-in-standalone-context
+      - edit-and-delete-only-on-own-comments
+      - search-filters-by-change-why-and-url-substring
+      - sort-options-newest-oldest-unresolved-first
+      - sort-preference-persists-in-localstorage
+      - corrupt-stored-sort-pref-falls-back-to-newest
+      - closed-bucket-includes-resolved-and-wont-fix-for-greyout-and-tabs
+    tests:
+      - tests/unit/sort-search.test.ts
+      - tests/e2e/sidebar-triage.spec.ts
+      - tests/e2e/triage-statuses.spec.ts
+    conflicts-with: []
+
+  - id: widget-headless-mode
+    surface: widget
+    contract: |
+      Auto-detect iframe context; do not render own toggle or sidebar.
+      Listen for postMessage from the parent: fp:wrapper-hello (go headless),
+      fp:set-mode (apply mode), fp:open-comment (scroll + open thread),
+      fp:request-state (reply). Post fp:widget-ready, fp:mode-changed,
+      fp:count, fp:comments to the parent.
+    invariants:
+      - headless-suppresses-toggle-and-sidebar
+      - postmessage-protocol-types-match-wrapper
+    tests: []
+    conflicts-with: []
+
+  - id: widget-screenshot-capture
+    surface: widget
+    contract: |
+      On comment submit, capture a viewport screenshot (white background, scroll-
+      offset cropped) using html2canvas-pro. Skip the widget host element via the
+      ignoreElements predicate. Best-effort: if capture fails, screenshot_key is
+      null and the comment still saves.
+    invariants:
+      - capture-failure-must-not-block-comment-save
+      - widget-host-must-not-appear-in-capture
+    tests: []
+    conflicts-with: []
+
+  - id: widget-anon-id
+    surface: widget
+    contract: |
+      A localStorage-persisted anonymous unique id (prefix u_, 16 random bytes
+      hex) is sent on every create/edit/delete via the x-fp-uid header.
+      Edit and delete actions match the original anon-id only.
+    invariants:
+      - anon-id-persists-per-browser
+      - edit-delete-gated-to-author
+    tests: []
+    conflicts-with: []
+
+  - id: widget-keyboard
+    surface: widget
+    contract: |
+      C toggles modes (when no input focused). Esc twice within ~700ms cancels
+      composer or exits Comment mode. Enter in a composer textarea submits or
+      advances; Shift+Enter inserts a newline. Cmd/Ctrl+Enter is accepted as a
+      familiar alias for Enter.
+    invariants:
+      - c-ignored-while-typing
+      - double-esc-required-not-single
+      - enter-advances-step-and-submits
+      - shift-enter-inserts-newline
+    tests:
+      - tests/e2e/composer.spec.ts
+    conflicts-with: []
+
+  # API surface
+  - id: api-comments-crud
+    surface: api
+    contract: |
+      Routes:
+        POST   /v1/comments               create (project token + optional anon-id)
+        GET    /v1/comments               list (filters: status, url)
+        GET    /v1/comments/:id           detail with replies
+        PATCH  /v1/comments/:id           edit own (anon-id must match)
+        DELETE /v1/comments/:id           delete own (anon-id must match)
+        POST   /v1/comments/:id/replies   reply
+        POST   /v1/comments/:id/status    set status (body: { status })
+        POST   /v1/comments/:id/resolve   resolve (legacy wrapper for status=resolved)
+        POST   /v1/comments/:id/reopen    reopen  (legacy wrapper for status=open)
+      All require Bearer token; anon-owned actions also require x-fp-uid.
+
+      Status enum: 'open' | 'in-progress' | 'wont-fix' | 'resolved'. The
+      /status route accepts any of the four and rejects others with 400.
+      Legacy /resolve and /reopen routes are preserved as thin wrappers that
+      delegate to the same shared status-setter, so existing widget builds
+      keep working. Status changes are NOT author-gated — any project-token
+      holder can triage any comment.
+    invariants:
+      - create-requires-non-empty-change-and-why
+      - patch-rejects-non-author-with-403
+      - delete-rejects-non-author-with-403
+      - origin-allowlist-enforced-when-set
+      - max-comment-bytes-enforced
+      - status-enum-allows-open-in-progress-wont-fix-resolved
+      - status-route-accepts-all-four-and-rejects-others-with-400
+      - legacy-resolve-reopen-routes-still-work-and-route-through-status-handler
+      - status-change-is-not-author-gated
+    tests:
+      - tests/api/status.test.ts
+    conflicts-with: []
+
+  - id: api-screenshots
+    surface: api
+    contract: |
+      POST /v1/screenshots — image upload, returns a key prefixed with project_id/.
+      GET  /v1/screenshots/:key — serves the image if key starts with project_id/.
+      Public read mirror at /v1/public/screenshots/:key?share=TOKEN.
+    invariants:
+      - screenshot-key-must-be-project-prefixed
+      - cross-project-read-rejected-with-403
+    tests: []
+    conflicts-with: []
+
+  - id: api-inference-endpoint
+    surface: api
+    contract: |
+      POST /v1/inference — given a comment + element context, returns an
+      AI-generated suggestion of intent: refined target description, scope
+      recommendation (single | cohort | global), confidence (0-1), optional
+      clarification question with multiple-choice options.
+
+      Auth: project token (Bearer).
+      Body: { comment, why?, target: { tag, classes, text, description },
+              cohortCount, isStyleAnchor, surroundingContext? }
+      Response: { refined_target?: string, scope: "single"|"cohort"|"global",
+                  confidence: number, clarification?: { question: string, options: string[] } }
+
+      Backed by Anthropic Claude Haiku via env.ANTHROPIC_API_KEY (Worker secret).
+      If the key is missing, the endpoint returns 503 with { error: "ai_unavailable" }
+      so the widget can fall back to its heuristic flow without breaking.
+    invariants:
+      - returns-503-when-anthropic-key-missing
+      - response-is-strict-json-with-known-shape
+      - no-ai-call-when-comment-empty
+    tests: []
+    conflicts-with: []
+
+  - id: widget-ai-inference
+    surface: widget
+    contract: |
+      Between step 2 (why) and the scope decision, the widget POSTs to
+      /v1/inference. If the response includes a clarification with
+      confidence < 0.7, a clarification step appears: a single question
+      with two or three option buttons. Picking an option records the
+      answer and proceeds to scope (or saves directly if AI says "single"
+      with high confidence). On 503 ai_unavailable, fall back to the
+      heuristic flow silently. AI is best-effort; never blocks save.
+    invariants:
+      - clarification-shown-only-when-confidence-low
+      - inference-failure-must-not-block-save
+      - clarification-answer-saved-with-comment
+    tests: []
+    conflicts-with: []
+
+  - id: api-public-share
+    surface: api
+    contract: |
+      Routes under /v1/public/* keyed by ?share=<share_token>. Read-only.
+      Returns project name, prefixed screenshots, and only the comments that
+      are still actively in the triage funnel — `status IN ('open','in-progress')`.
+      `wont-fix` and `resolved` comments are deliberately invisible to share
+      visitors.
+    invariants:
+      - share-routes-never-allow-write
+      - share-routes-expose-open-and-in-progress-only
+    tests:
+      - tests/api/status.test.ts
+    conflicts-with: []
+
+  # Wrapper surface (lives on dashboard worker at /review)
+  - id: wrapper-toolbar
+    surface: wrapper
+    contract: |
+      Top toolbar with two clusters separated by a flex spacer:
+
+        Left cluster:  project name, target URL, segmented Comment/Browse
+                       mode toggle.
+        Right cluster: viewport controls row (device-class glyph switcher
+                       + numeric width input + presets dropdown), Share
+                       button, Hide-comments button with open count badge.
+
+      The viewport controls row replaces the old three-button Desktop/Tablet/
+      Mobile segmented control with three composable controls:
+
+        - DeviceSeg     — two-button glyph cluster (desktop + mobile only;
+                          tablet lives only as a preset optgroup).
+                          `aria-pressed` reflects which class the current
+                          {w, h} resolves to. Desktop click = fill canvas;
+                          Mobile click = last-used mobile width or 390×844.
+        - WidthInput    — numeric `<input type="number">`, `aria-label`
+                          "Frame width in pixels", debounced 250ms with a
+                          local-state-with-effect-guard pattern so the caret
+                          stays at the end mid-type. On blur/commit, values
+                          outside [320, 2560] revert to the last good width
+                          and surface an inline absolute-positioned error
+                          ("Width must be 320–2560") below the input.
+                          Empty input → fill-canvas (debounced).
+        - PresetSelect  — `<select>` with three `<optgroup>`s (Mobile /
+                          Tablet / Desktop), a "Fill canvas" option, and a
+                          hidden "__custom" sentinel that becomes the
+                          selected option when the current {w, h} doesn't
+                          match any preset.
+
+      Mode toggle here is the source of truth and mirrored to the iframe via
+      postMessage. Viewport, share, and hide live together because they are
+      all "session controls" — adjustments to how the user is reviewing the
+      page rather than what they're reviewing.
+
+      Right-cluster buttons (Share, Hide-comments) reserve a stable footprint
+      via `.btn-toolbar` (min-width 180px, content centred) so label changes
+      ("Hide comments" ⇄ "Show comments", "Share" ⇄ "Copied!") and count-
+      badge digit width changes do not reflow neighbouring controls. The
+      count badge itself has min-width 22px for the same reason.
+
+      Visual treatment migrated to SDS tokens (colours, spacing, typography,
+      radii) via the per-iframe `<style>` block injected from
+      `dashboard/worker/reviewHtml.ts`. The `min-width: 180px` on
+      `.btn-toolbar` is retained as a raw layout value — it is a load-bearing
+      anti-reflow guard, not a token.
+    invariants:
+      - mode-segmented-control-present-in-toolbar
+      - viewport-controls-present-glyph-width-input-and-presets-dropdown
+      - viewport-glyph-switcher-toggles-desktop-fill-and-mobile-default
+      - viewport-segment-rendered-in-right-cluster-after-spacer
+      - count-badge-reflects-open-comments
+      - toolbar-button-widths-stable-across-state-toggles
+    tests:
+      - tests/e2e/viewport-controls.spec.ts
+      - tests/e2e/wrapper.spec.ts
+    conflicts-with: []
+
+  - id: wrapper-iframe
+    surface: wrapper
+    contract: |
+      Loads ?url=<target> in an iframe whose size is parameterised by
+      `?w=NNN[&h=NNN]` URL params. Width is clamped to [320, 2560] both
+      on input and on URL read; height to [240, 4096]. When `w` (or
+      equivalently `viewport=mobile|tablet`) is set, the iframe renders at
+      that pixel width with the corresponding height. When `w` is unset (or
+      `viewport=desktop`), the iframe fills the canvas via the `.is-desktop`
+      class (`position: absolute; inset: 16px`).
+
+      Legacy `?viewport=desktop|tablet|mobile` aliases still resolve on read
+      for back-compat with old share links. Concrete preset sizes (e.g.
+      tablet 820×1180, mobile 390×844, iPhone 14 Pro Max 430×932) are
+      surface choices in the toolbar's PresetSelect, not part of the iframe
+      contract.
+
+      On iframe load, wrapper sends fp:wrapper-hello and fp:set-mode.
+    invariants:
+      - desktop-iframe-fills-canvas
+      - desktop-iframe-fills-canvas-only-when-fill-canvas-preset-is-chosen
+      - iframe-renders-at-width-w-px-when-w-param-is-set
+      - legacy-viewport-aliases-desktop-tablet-mobile-still-resolve-correctly
+      - width-clamped-to-320-to-2560-on-input-and-on-read
+    tests:
+      - tests/e2e/viewport-controls.spec.ts
+    conflicts-with: []
+
+  - id: wrapper-sidebar
+    surface: wrapper
+    contract: |
+      Right-side comments list, filterable (Open/Resolved/All). The Open tab
+      buckets `open` + `in-progress`; the Resolved tab buckets `resolved` +
+      `wont-fix`. Each row displays a compact status pill (one of four
+      colour classes) and gets the `is-closed` class for greyout when the
+      status is `resolved` or `wont-fix`. Click an item to set ?open=<id>
+      in the URL and post fp:open-comment to the iframe. Polls comments
+      every 3s.
+
+      Layout: the sidebar is positioned absolutely over the canvas (right
+      edge, 360px wide) and slides in/out via a transform — the iframe
+      canvas dimensions never change when the sidebar is toggled. This is
+      load-bearing for the widget composer modal: a fixed-position modal
+      inside the iframe must stay anchored to its element when the user
+      toggles the sidebar, and any iframe reflow would break that anchor.
+
+      A controls row above the list provides:
+        - Search input — case-insensitive substring filter over change_text,
+          why_text, and url. Empty query = no filter. Placeholder reads
+          "Search N comments…" where N is the visible count.
+        - Sort select — three options: newest (default), oldest, unresolved
+          first. Selection persists per-user via localStorage key `fp_sort`
+          (shared with the widget standalone sidebar and dashboard list).
+
+      Three empty states: "No comments yet", "No comments in this view.",
+      and `No comments matching "<q>"`. Page grouping is NOT used here —
+      the wrapper is URL-scoped to one target page at a time.
+    invariants:
+      - sidebar-overlays-canvas-without-reflowing-iframe
+      - click-row-updates-url-and-posts-message
+      - filter-tabs-match-status
+      - search-filters-by-change-why-and-url-substring
+      - sort-options-newest-oldest-unresolved-first
+      - sort-preference-persists-in-localstorage
+      - closed-bucket-includes-resolved-and-wont-fix-for-greyout-and-tabs
+    tests:
+      - tests/e2e/sidebar-triage.spec.ts
+      - tests/e2e/wrapper.spec.ts
+      - tests/e2e/triage-statuses.spec.ts
+    conflicts-with: []
+
+  - id: wrapper-share
+    surface: wrapper
+    contract: |
+      Share button copies a URL with ?share=<share_token>&open=<id>&w=NNN[&h=NNN]
+      to the clipboard. When the current viewport is fill-canvas (desktop),
+      the share URL writes `viewport=desktop` instead of `w/h` — the
+      delete-opposite rule is centralised in `applyViewportToUrl` so the two
+      params are mutually exclusive. Shown link works for any visitor
+      (read-only).
+    invariants:
+      - share-link-uses-share-token-not-project-token
+      - share-link-includes-w-and-h-when-set-or-viewport-alias-when-fill-canvas
+    tests:
+      - tests/e2e/viewport-controls.spec.ts
+    conflicts-with: []
+
+  # Dashboard surface
+  - id: dashboard-list
+    surface: dashboard
+    contract: |
+      Implementation: the dashboard SPA is built with Vite from
+      `dashboard/web/src/routes/CommentsList.tsx` and served by the
+      Cloudflare Worker via Workers Static Assets (binding declared in
+      `dashboard/wrangler.toml`). The list route consumes SDS primitives
+      (Button, Tag, Input, etc.) from the vendored copy at
+      `dashboard/web/src/sds/`; the sidebar tabs are an intentional
+      deviation rendered as native `<button class="tab">` (see
+      `dashboard-sidebar-tabs-are-native`).
+
+      Login by project token (stored in localStorage). Sidebar tabs
+      Open/Resolved with counts. The tab strip remains binary: Open buckets
+      `open` + `in-progress`, Resolved buckets `resolved` + `wont-fix`.
+      The list runs on a single fetch (no `?status=` filter) and buckets
+      client-side, so tab counts and contents always agree on the same
+      snapshot. Each row shows truncated change text, site-wide tag, anon-id
+      (first 6 chars), timestamp, page URL pathname (display-only span — click
+      the row to enter detail; the linkable URL lives in the detail panel), and a status pill (one of four
+      colour classes). Rows whose status is `resolved` or `wont-fix` get
+      the `is-closed` class for greyout (rendered via the runtime
+      `isClosedStatus()` helper, single source of truth).
+
+      A controls row above the list provides:
+        - Search input — case-insensitive substring filter over change_text,
+          why_text, and url. Empty query = no filter. Placeholder reads
+          "Search N comments…" where N is the visible count.
+        - Sort select — three options: newest (default), oldest, unresolved
+          first. Selection persists per-user via localStorage key `fp_sort`
+          (shared with widget and wrapper sidebars).
+
+      Page grouping: when the visible (post search/filter/sort) comment set
+      spans more than one distinct page URL, render collapsible group
+      headers, one per page, in first-seen order within the sorted list.
+      Pin numbering is global across groups so numbers remain stable as a
+      user collapses sections. Single-page projects render flat.
+      Group default state is expanded; collapse state is held in component
+      state and not persisted.
+
+      Three empty states: "No comments yet", "No comments in this view.",
+      and `No comments matching "<q>"`.
+    invariants:
+      - anon-id-shown-truncated-not-full
+      - site-wide-tag-rendered-when-true
+      - search-filters-by-change-why-and-url-substring
+      - sort-options-newest-oldest-unresolved-first
+      - sort-preference-persists-in-localstorage
+      - page-groups-render-only-when-distinct-page-count-greater-than-one
+      - closed-bucket-includes-resolved-and-wont-fix-for-greyout-and-tabs
+      - dashboard-sidebar-tabs-are-native
+    tests:
+      - tests/unit/sort-search.test.ts
+      - tests/unit/status-bucket.test.ts
+      - tests/e2e/sidebar-triage.spec.ts
+      - tests/e2e/triage-statuses.spec.ts
+    conflicts-with: []
+
+  - id: dashboard-detail
+    surface: dashboard
+    contract: |
+      Implementation: `dashboard/web/src/routes/CommentDetail.tsx` in the
+      Vite-built SPA, served via Workers Static Assets. The route consumes
+      SDS primitives (Button, Tag, Textarea, etc.) from
+      `dashboard/web/src/sds/`; the Status control is an intentional
+      deviation rendered as a native `<select id="fp-status-select">` so
+      the Playwright e2e can read its `<option>` values directly (see
+      `dashboard-status-select-is-native`).
+
+      Detail view shows screenshot (or "no screenshot" empty state), element
+      anchor, page link, change/why fields, anon-id (10 chars + ellipsis,
+      full id in title attribute), browser/device metadata foldout, thread
+      with designer reply, and a status `<select>` (replacing the previous
+      resolve/reopen button). The select is rendered with a visible
+      `<label>Status</label>` and lists all four states: Open, In progress,
+      Won't fix, Resolved (display copy is sentence-case "Won't fix" wired
+      to the hyphenated wire value `wont-fix`).
+    invariants:
+      - anon-id-truncated-with-full-in-title
+      - metadata-foldout-renders-only-when-present
+      - detail-view-status-select-lists-four-options-with-wont-fix-label
+      - dashboard-status-select-is-native
+    tests:
+      - tests/e2e/triage-statuses.spec.ts
+    conflicts-with: []
+
+  # Cross-cutting design-system feature: SDS as the canonical UI vocabulary.
+  # Adopted 2026-05-01. See decisions/2026-05.log and
+  # reports/2026-05-01-design-system-sds.md.
+  - id: design-system-sds
+    surface: cross-cutting
+    contract: |
+      Figma's Simple Design System (SDS) is the canonical UI vocabulary for
+      every surface in feedback-pin. The upstream is open source under MIT
+      (https://github.com/figma/sds) and is vendored into this repo at
+      `dashboard/web/src/sds/` from commit `be440d804c525a0d5654900161988edbe9754575`.
+      Provenance — upstream commit SHA, retrieval date, and exact vendored
+      file list — is recorded in `dashboard/web/src/sds/PROVENANCE.md`; the
+      MIT licence is preserved verbatim at `dashboard/web/src/sds/LICENSE`.
+
+      Dashboard:
+        Built as a Vite SPA from `dashboard/web/` and served by a slim
+        Cloudflare Worker via Workers Static Assets (binding declared in
+        `dashboard/wrangler.toml`, with `run_worker_first = true` so
+        `/review` and `/health` reach the worker before the SPA fallback).
+        The SPA imports SDS primitives directly from the vendored copy
+        (`dashboard/web/src/sds/ui/primitives/...`) for buttons, inputs,
+        tags, textareas, etc. There are two documented native deviations:
+        the comments-list sidebar tabs are native `<button class="tab">`
+        (RAC autogenerated ids contain `:` and fail axe `aria-valid-attr-
+        value`), and the detail-view Status control is a native `<select>`
+        so the Playwright e2e can read its `<option>` values directly. No
+        CDN React in the SPA — the `/review` wrapper is the documented
+        exception (it still loads React via esm.sh per the original plan).
+        Bundle budget enforced at build time: JS gzipped ≤ 200 kB, CSS
+        gzipped ≤ 100 kB (`dashboard/web/scripts/check-bundle.mjs`).
+        Fonts are self-hosted via `@fontsource/inter` + `@fontsource/roboto-mono`
+        (no Google Fonts).
+
+      Widget:
+        Stays vanilla TypeScript inside a shadow root (no React, no
+        react-aria-components). Consumes SDS at the **token** level via
+        `widget/src/tokens.ts`, which mirrors `dashboard/web/src/sds/theme.css`
+        but scopes every selector to `:host` so SDS variables don't leak
+        onto the host page. `widget/src/styles.ts` references the SDS
+        token chain (`var(--sds-...)`) for colours, radii, and shadows.
+        A guard script (`widget/scripts/check-no-cross-import.mjs`) runs
+        as the widget `prebuild` step to ensure the widget never imports
+        from `dashboard/web/src/`.
+
+      Per-surface deviations remain custom by design and are individually
+      documented as invariants below: cursor-badge geometry, outline-only
+      highlight geometry, spotlight overlay rgba opacity, and the submit
+      button radius mapped to `--sds-size-radius-200`.
+
+      CSP:
+        `dashboard/worker/index.ts` injects a strict CSP on SPA HTML
+        (`script-src 'self'`) and a relaxed CSP on `/review` only
+        (`script-src 'self' 'unsafe-inline' https://esm.sh; connect-src
+        'self' <api> https://esm.sh`) so the inline-module wrapper and its
+        esm.sh imports keep working without weakening the SPA.
+    invariants:
+      - sds-vendored-mit-license-shipped
+      - dashboard-built-from-sds-primitives
+      - dashboard-status-select-is-native
+      - dashboard-sidebar-tabs-are-native
+      - widget-styles-sourced-from-sds-tokens
+      - no-cdn-react-in-dashboard-spa
+      - wrangler-serves-vite-built-assets
+      - dashboard-bundle-budget
+      - widget-does-not-import-dashboard-sds
+      - dashboard-csp-strict-on-spa-relaxed-on-review
+      - cursor-badge-remains-custom-consumes-sds-brand-token-only
+      - outline-only-highlight-consumes-sds-color-tokens-only-geometry-preserved
+      - spotlight-overlay-consumes-sds-color-tokens-only-opacity-preserved
+      - submit-button-radius-mapped-to-sds-radius-200
+      - dashboard-icon-button-wrapper-emits-aria-label-and-title
+      - widget-fonts-load-from-system-stack-only
+      - dashboard-fonts-self-hosted-via-fontsource-not-google
+    tests:
+      - tests/e2e/dashboard-sds-render.spec.ts
+      - tests/unit/sds-contracts.test.ts
+    conflicts-with: []
+
+  # Cross-cutting "rules" that apply to every surface, not a single component.
+  # Treated as a feature so they live alongside other contracts and have a
+  # single, citable id when an invariant needs to be referenced from a PR.
+  - id: universal-rules
+    surface: cross-cutting
+    contract: |
+      Rules that apply to every surface in feedback-pin (widget, wrapper,
+      dashboard) regardless of the component.
+
+      Tooltips on icon-only buttons:
+        Any <button> whose visible text content is empty (the only child is
+        an icon, an SVG, or otherwise non-textual) MUST carry a `title`
+        attribute. This is independent of `aria-label` (which serves screen
+        readers) — `title` is the visible mouseover tooltip the user expects
+        when they hover an icon button to learn what it does. The simplest
+        way to keep the two in sync is to set them to the same string, but
+        a shorter `title` is fine.
+    invariants:
+      - icon-only-buttons-have-title-attribute
+    tests:
+      - tests/e2e/thread-view-edit.spec.ts
+    conflicts-with: []
+
+# ─── Roadmap ──────────────────────────────────────────────────────────────────
+# Queued briefs the autonomous loop pulls from.
+#
+# Usage: append entries here, then run `/loop /fp-next`. The fp-next skill
+# (`.claude/skills/fp-next/SKILL.md`) picks the lowest-priority `status: queued`
+# entry, marks it in-progress, and hands the brief to fp-feature. On success
+# the integrator flips it to `done`; on any halt it stays in-progress with a
+# `halt_note:` for the user to resolve.
+#
+# Schema:
+#   id          required, unique, format r-YYYY-MM-DD-NN
+#   title       required, short label
+#   priority    required, integer; lower = higher priority
+#   status      required: queued | in-progress | done
+#   queued_on   required, YYYY-MM-DD
+#   brief       required, multi-line; same format you would type to fp-feature
+#   weight      optional: lightweight | full (auto-classified if absent)
+#   notes       optional, free text
+#   started_on  written by fp-next when work begins
+#   shipped_on  written by fp-next on success
+#   halt_note   written by fp-next on any halt
+#
+# Items with `status: done` are pruned by fp-next after 14 days.
+#
+# Template (uncomment and edit):
+# roadmap:
+#   - id: r-2026-05-05-01
+#     title: Inline pin replies in dashboard sidebar
+#     priority: 10
+#     status: queued
+#     queued_on: 2026-05-05
+#     brief: |
+#       Allow a viewer to reply to a pin from the dashboard sidebar
+#       without opening the pin detail panel. Same auth model as
+#       comments. Reuses the existing reply endpoint; only the UI
+#       affordance is new. Sidebar row gains a reply textarea on click.
+#     weight: standard
+#   - id: r-2026-05-05-02
+#     title: Resolve-all keyboard shortcut on dashboard list
+#     priority: 20
+#     status: queued
+#     queued_on: 2026-05-05
+#     brief: |
+#       Add a keyboard shortcut (e.g. shift+R) on the dashboard list
+#       that resolves every comment in the currently visible group.
+#       Confirmation dialog before bulk action; undo within 5s via toast.
+#     weight: lightweight
+roadmap: []
+
+# ─── Decisions index ──────────────────────────────────────────────────────────
+# One-line entries appended by the integrator. Full file: decisions.log
+recent_decisions:
+  - "2026-04-28 | widget-screenshot-capture | swap html-to-image → html2canvas-pro | html-to-image's SVG decode fails opaquely with Event(error on IMG) in modern Chrome"
+  - "2026-04-28 | widget-mode-toggle | initial mode = browse internally, then setMode(comment) | setMode early-return prevented click listener registration when initial state matched"
+  - "2026-04-28 | wrapper-iframe | #root height: 100% added | layout was resolving against #root which had no explicit height"
+  - "2026-04-28 | strategy | adopt fp-feature pipeline + manifest as source of truth | end ad-hoc chat-driven coding"
+  - "2026-04-29 | widget-mode-toggle | new 24×24 map-pin cursor, tip at integer pixel (12,23) = CSS hotspot | old comment-bubble cursor's tail was at viewBox (3,21) but hotspot was 4 4 — clicks landed ~20px above the visual tip"
+  - "2026-04-29 | strategy | swap chartreuse highlight #C7FF00 for interim primary blue #2563EB across widget+dashboard | green had readability issues against warm off-white; explicitly interim, may change in brand pass"
+  - "2026-04-30 | widget-composer | remove step-indicator dots and history-item labels; placeholders reappear when fields are emptied | maximally minimal shell — labels and dots weren't carrying their weight"
+  - "2026-04-30 | widget-composer | scope buttons rename to 'This instance' / 'Site-wide' (always, regardless of cohort), rendered side by side, 'Apply to:' label removed | shorter, clearer copy; binary choice doesn't need a question above it"
+  - "2026-04-30 | widget-composer | submit button changes from 32px circle to 40×28 rounded-rectangle (radius 8); textarea right-padding bumped to 52px | rectangle reads more like a button than a status dot"
+  - "2026-04-30 | widget-keyboard | Enter submits/advances, Shift+Enter inserts a newline; Cmd/Ctrl+Enter kept as alias | matches chat-app convention; Cmd+Enter was the old primary"
+  - "2026-04-30 | widget-composer | shake warning now fires whenever any field (including the live, uncommitted textarea) has content, not just whatText/whyText | bug: typing in step 1 then dismissing was silently dropping the input"
+  - "2026-04-30 | dashboard-list | drop most-replies sort option | replies live behind GET /v1/comments/:id; counting them on the client would require N+1 fetches and the brief is no API change"
+  - "2026-04-30 | dashboard-list | page grouping scoped to dashboard-list only | wrapper-sidebar and widget-sidebar-standalone are URL-scoped to a single page already, so grouping there is dead UI"
+  - "2026-04-30 | strategy | shared `fp_sort` localStorage key across widget, wrapper, and dashboard surfaces | one preference travels with the user across surfaces — no surprise reset between contexts"
+  - "2026-04-30 | dashboard-list | groups default-expanded; collapse state held in component state, not persisted | revisit cost is one click per group; persisting collapse adds a second key with weak payoff"
+  - "2026-04-30 | dashboard-list | group ordering = first-seen URL order within the sorted list, not alphabetical | follows the chosen sort (newest/oldest/unresolved) so the surfacing logic is predictable"
+  - "2026-04-30 | dashboard-list | pin numbering stays global across groups, not per-group | numbers double as stable IDs in conversation; per-group renumbering would shift them when a user collapses a section"
+  - "2026-04-30 | wrapper-toolbar | viewport segment moved next to share + hide on the right cluster (after the spacer) | groups all session controls together; clearer left/right split between context (mode) and session (viewport/share/hide)"
+  - "2026-04-30 | wrapper-toolbar | toolbar buttons reserve min-width 180px and count badge min-width 22px | label flips ('Hide comments' ⇄ 'Show comments', 'Share' ⇄ 'Copied!') and digit-count changes were nudging neighbouring controls"
+  - "2026-04-30 | wrapper-sidebar | sidebar overlays the canvas via position:absolute + transform; iframe never reflows on toggle | bug: widget composer modals (position:fixed inside the iframe) were getting misaligned because canvas resize was reflowing iframe content"
+  - "2026-04-30 | wrapper | rename top-level URL helper setQuery → setUrlParams to break shadowing by the search-input useState setter | viewport tab clicks and ?open= updates were silently no-ops since the search-input feature landed"
+  - "2026-04-30 | widget-pins | thread becomes a two-mode state machine: view (read-only, default) and edit (textareas + checkbox + Cancel/Save) | per-field inline-edit was discoverable only by the author hovering on the right; an explicit Edit affordance is clearer and gives a transactional save with a Cancel escape"
+  - "2026-04-30 | widget-pins | edit-form fields wrap each textarea in a <label> so the whole field is one click target | user wants clicking the label or the field area to focus the input"
+  - "2026-04-30 | widget-pins | site_wide becomes a checkbox in edit mode; in view mode 'Apply to' renders only when site_wide is true | unchecked + visible label was noise on local-only comments"
+  - "2026-04-30 | universal-rules | new feature with cross-cutting invariant: every icon-only button has a title attribute | aria-label serves screen readers but mouseover users expect a visible tooltip; making it a manifest invariant means new icon buttons can't ship without one"
+  - "2026-04-30 | strategy | text and icons on a solid #2563EB highlight background flip from #1a1a1a to #fff across widget+dashboard | dark text on the saturated blue read as muddy at small sizes (pins, tags, count badges); white reads cleanly"
+  - "2026-04-30 | widget-composer | hover + sticky highlights become outline-only (no fill, no halo) | the soft blue fill flooded the page tone; the 2px outline alone is enough to read as 'hover' or 'selected' "
+  - "2026-04-30 | widget-composer | new spotlight overlay dims everything outside the selected element rect while composing (~45% black, box-shadow spread trick) | Pastel-style focus; widget chrome stacks above the overlay so toggle/sidebar/pins/composer remain bright"
+  - "2026-04-30 | widget-mode-toggle | drop CSS cursor override; OS cursor stays default. Add a 20px floating badge with three stages (follow / snap / hidden) | screenshot-driven UX redesign: indicator shows next to default cursor, snaps to composer, then cross-fades into the resulting pin"
+  - "2026-04-30 | api-comments-crud | widen status enum to open|in-progress|wont-fix|resolved, backward-compatible (no DB migration) | preserve 'open' keyword and slot the new triage states between it and 'resolved'"
+  - "2026-04-30 | api-comments-crud | new POST /v1/comments/:id/status; legacy /resolve + /reopen kept alive as wrappers | shared status-setter under the hood, existing widget builds keep working"
+  - "2026-04-30 | api-public-share | share-routes now expose open + in-progress only; wont-fix and resolved invisible to share visitors | only triage-active comments belong on the share view; closed states are internal"
+  - "2026-04-30 | dashboard-list | tab strip stays binary (Open / Resolved / All) bucketing the four-state enum | richer triage state lives in row pill + detail select; tabs keep the at-a-glance summary"
+  - "2026-04-30 | widget-pins | UI label \"Won't fix\" wired to value `wont-fix` | dev-tooling-style hyphenated wire value, sentence-case display"
+  - "2026-04-30 | widget-pins | CSS class is-resolved → is-closed across widget+dashboard+wrapper | two states (resolved + wont-fix) now share the closed bucket; class name reflects that"
+  - "2026-04-30 | widget-pins | WidgetApi.resolve()/reopen() kept alive as public-API wrappers around the new shared status helper | widget exports stay back-compat; consider deprecating in a follow-up batch"
+  - "2026-04-30 | dashboard-list | Comments switched from two-fetch (open + resolved) to single-fetch + client-side bucketing | tab counts and tab contents now agree on a single snapshot; halves request volume"
+  - "2026-04-30 | wrapper-toolbar | drop tablet glyph from device switcher; tablet remains as a preset optgroup | avoids ambiguous click-action; two-glyph switcher matches the desktop/mobile mental binary"
+  - "2026-04-30 | wrapper-iframe | new ?w=NNN[&h=NNN] URL params replace ?viewport=; legacy ?viewport=desktop|tablet|mobile aliases preserved on read | back-compat with old share links while moving to a continuous width model"
+  - "2026-04-30 | wrapper-iframe | read-time clamping on ?w= and ?h= (silently coerce out-of-range values into [320,2560] / [240,4096]) | share-link tampering tolerates rather than rejects; predictable surface for any incoming param"
+  - "2026-04-30 | wrapper-toolbar | inline error 'Width must be 320–2560' rendered as absolute-positioned overlay below the WidthInput | directly actionable next to the input; doesn't push toolbar content or trigger a toast"
+  - "2026-04-30 | wrapper-toolbar | empty WidthInput maps to fill-canvas (gated by 250ms debounce) | intuitive 'no width = no constraint' mapping; debounce swallows mid-typing deletion so the frame doesn't flash"
+  - "2026-04-30 | wrapper-toolbar | keep commitViewport and applyViewportToUrl as two helpers (history sink vs URL-builder) sharing the same delete-opposite rule | one shared rule, two write-sites; resists drift between in-app navigation and share-link generation"
+  - "2026-04-30 | wrapper-toolbar | viewport helpers stay inline in dashboard/src/index.ts (no dashboard/src/viewport.ts extraction) — e2e-only coverage | helpers are pure but have no current branching that warrants a unit suite; revisit if Batch 3 adds further branching"
+  - "2026-05-01 | design-system-sds | adopt Figma SDS (vendored from figma/sds@be440d8) as canonical UI vocabulary; dashboard moves to Vite + Workers Static Assets; widget styled via SDS tokens; af-brand-polish redefined"
+  - "2026-05-01 | design-system-sds | dashboard CSP branched per-route — strict on SPA, relaxed on /review (allows 'unsafe-inline' + https://esm.sh) | the /review wrapper still loads React via esm.sh per plan; SPA is fully bundled and stays strict"
+  - "2026-05-01 | design-system-sds | sidebar tabs and status select rendered as native HTML, not SDS primitives | RAC's autogenerated ids with ':' fail axe aria-valid-attr-value; native <select> required for e2e to read <option> values"
+  - "2026-05-01 | design-system-sds | dropped the inline page-URL anchor from .list-item rows; URL pathname renders as <span> | axe nested-interactive flagged the row-button + nested anchor; row-level URL link removed in favour of detail-panel link"
+  - "2026-05-01 | design-system-sds | secondary text token --sds-color-text-default-secondary overridden in dashboard app.css from gray-500 to gray-600 | SDS default fails AA on white at body sizes"
+  - "2026-05-01 | design-system-sds | dark mode stripped from vendored theme.css; color-scheme: light enforced on :root and :host | dashboard is light-only; dark mode would need its own feature"

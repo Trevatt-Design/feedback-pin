@@ -1,0 +1,181 @@
+.fp-detail-shell {
+  padding: var(--sds-size-space-700, 28px) var(--sds-size-space-800, 32px);
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.fp-detail-shell:focus {
+  outline: none;
+}
+.fp-detail-back {
+  margin-bottom: var(--sds-size-space-400, 16px);
+}
+.fp-detail {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: var(--sds-size-space-600, 24px);
+}
+@media (max-width: 1000px) {
+  .fp-detail {
+    grid-template-columns: 1fr;
+  }
+}
+.fp-detail-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-size-space-500, 20px);
+  min-width: 0;
+}
+.fp-screenshot {
+  background: var(--sds-color-background-default-default, #ffffff);
+  border: 1px solid var(--sds-color-border-default-default, #e6e6e6);
+  border-radius: var(--sds-size-radius-200, 8px);
+  overflow: hidden;
+}
+.fp-screenshot img {
+  display: block;
+  width: 100%;
+}
+.fp-panel {
+  background: var(--sds-color-background-default-default, #ffffff);
+  border: 1px solid var(--sds-color-border-default-default, #e6e6e6);
+  border-radius: var(--sds-size-radius-200, 8px);
+  padding: var(--sds-size-space-500, 20px);
+}
+.fp-panel-empty {
+  padding: var(--sds-size-space-600, 24px);
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+}
+.fp-panel-h3 {
+  margin: 0 0 var(--sds-size-space-300, 12px);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+  font-weight: 500;
+}
+.fp-field {
+  margin-bottom: var(--sds-size-space-300, 14px);
+}
+.fp-field:last-child {
+  margin-bottom: 0;
+}
+/* Eyebrow typography — preserved at 11px (Stage 3 amendment).
+   Below SDS body-small ramp; the eyebrow register is intentional.
+   Do not collapse into --sds-font-body-small. */
+.fp-field-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+  margin-bottom: 4px;
+  display: block;
+}
+.fp-field-value {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--sds-color-text-default-default, #1a1a1a);
+}
+/* Page-link wraps mid-token so a long URL never blows out the right column.
+   `title` attribute on the anchor preserves the full URL on hover. */
+.fp-detail-page-link {
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  display: inline-block;
+  max-width: 100%;
+}
+.fp-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+.fp-mono-muted {
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+}
+.fp-status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sds-size-space-200, 8px);
+}
+/* Native <select> styled to read like a small SDS-flavoured combo. */
+.fp-status-select {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--sds-color-border-default-default, #e6e6e6);
+  border-radius: var(--sds-size-radius-100, 4px);
+  background: var(--sds-color-background-default-default, #ffffff);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%231a1a1a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  font: 500 12px var(--sds-font-family-base, system-ui, sans-serif);
+  /* Use default text colour (near-black) so the visible value passes
+     WCAG AA contrast on the white background. */
+  color: var(--sds-color-text-default-default, #1a1a1a);
+  cursor: pointer;
+  outline: none;
+}
+.fp-status-select:focus {
+  border-color: var(--sds-color-border-brand-default, #1a1a1a);
+  box-shadow: 0 0 0 3px var(--sds-color-background-brand-tertiary, rgba(31, 95, 107, 0.15));
+}
+.fp-status-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.fp-meta-foldout {
+  margin-top: var(--sds-size-space-300, 12px);
+}
+.fp-meta-foldout summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.fp-meta-pre {
+  margin-top: var(--sds-size-space-200, 8px);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.fp-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-size-space-200, 10px);
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.fp-thread-empty {
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+  font-size: 13px;
+}
+.fp-msg {
+  padding: var(--sds-size-space-300, 10px) var(--sds-size-space-300, 12px);
+  border-radius: var(--sds-size-radius-100, 6px);
+  background: var(--sds-color-background-default-secondary, #f7f7f7);
+}
+.fp-msg.is-designer {
+  background: var(--sds-color-background-brand-tertiary, #eef4f5);
+}
+.fp-msg-meta {
+  font-size: 11px;
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+  margin-bottom: 4px;
+}
+.fp-reply-box {
+  display: flex;
+  gap: var(--sds-size-space-200, 8px);
+  margin-top: var(--sds-size-space-300, 10px);
+  align-items: stretch;
+}
+.fp-reply-box .text-area {
+  flex: 1;
+  min-height: 56px;
+  font-size: 13px;
+}
+/* `.fp-err` — defined once globally in app.css. */

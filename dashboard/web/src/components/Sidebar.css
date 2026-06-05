@@ -1,0 +1,98 @@
+/* Sidebar layout. Compact density per Stage 3 amendments.
+
+   The sidebar is a vertical flex column pinned to 260px. Tabs come from
+   SDS (react-aria-components) but the row chrome (count badge, brand
+   header, foot) is project-layer markup, styled here via SDS tokens. */
+
+.fp-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--sds-color-background-default-default, #ffffff);
+  border-right: 1px solid var(--sds-color-border-default-default, #e6e6e6);
+  padding: var(--sds-size-space-500, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-size-space-400, 16px);
+  min-height: 100vh;
+}
+
+.fp-sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fp-sidebar-brand-name {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  color: var(--sds-color-text-default-default, #1a1a1a);
+}
+.fp-sidebar-brand-project {
+  font-size: 12px;
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+}
+
+.fp-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+}
+/* Two-state filter rendered as native <button>s (not SDS Tabs) — see
+   Sidebar.tsx for the rationale (axe aria-valid-attr-value). The
+   `.tabs` and `.tab` class hooks remain in place so e2e selectors still
+   match. The list stacks vertically because the sidebar itself is a
+   narrow column; on the wrapper sidebar the same `.tabs` class hosts
+   horizontal tabs and is unaffected. */
+.fp-sidebar-nav .tabs {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+.fp-sidebar-nav .tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sds-size-space-200, 8px);
+  padding: var(--sds-size-space-200, 8px) var(--sds-size-space-300, 12px);
+  border-radius: var(--sds-size-radius-200, 6px);
+  font: 500 13px var(--sds-font-family-base, system-ui, sans-serif);
+  cursor: pointer;
+  width: 100%;
+  /* Reset native <button> chrome */
+  background: transparent;
+  border: 0;
+  color: var(--sds-color-text-default-default, #1a1a1a);
+  text-align: left;
+}
+.fp-sidebar-nav .tab:hover {
+  background: var(--sds-color-background-default-secondary, #f3f3f3);
+}
+.fp-sidebar-nav .tab.is-active {
+  background: var(--sds-color-background-default-secondary, #efefef);
+  color: var(--sds-color-text-default-default, #1a1a1a);
+}
+.fp-sidebar-nav .tab:focus-visible {
+  outline: 2px solid var(--sds-color-border-brand-default, #1a1a1a);
+  outline-offset: -2px;
+}
+.fp-sidebar-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--sds-color-background-default-secondary, #e8e8e8);
+  /* Secondary text token is overridden to gray-600 in app.css so this
+     small badge text passes WCAG AA contrast against the muted bg. */
+  color: var(--sds-color-text-default-secondary, #444444);
+  font-weight: 500;
+}
+.fp-sidebar-nav .tab.is-active .fp-sidebar-badge {
+  background: var(--sds-color-background-brand-default, #1a1a1a);
+  color: var(--sds-color-text-brand-on-brand, #ffffff);
+}
+
+.fp-sidebar-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-size-space-200, 8px);
+}

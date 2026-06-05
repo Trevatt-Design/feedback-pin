@@ -1,0 +1,31 @@
+{
+  "name": "feedback-pin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "In-situ feedback for any website. Comment-first, designer-friendly.",
+  "workspaces": [
+    "widget",
+    "api",
+    "dashboard",
+    "dashboard/web"
+  ],
+  "scripts": {
+    "build": "npm run build -w widget",
+    "build:dashboard": "npm run build -w dashboard/web",
+    "deploy:api": "npm run deploy -w api",
+    "deploy:dashboard": "npm run build -w dashboard/web && npm run deploy -w dashboard",
+    "deploy": "npm run deploy:api && npm run deploy:dashboard",
+    "test": "npm run test:unit && npm run test:api && npm run test:e2e",
+    "test:unit": "vitest run tests/unit",
+    "test:api": "vitest run tests/api",
+    "test:e2e": "playwright test",
+    "test:watch": "vitest tests"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.1",
+    "@playwright/test": "^1.49.0",
+    "happy-dom": "^20.9.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.8"
+  }
+}

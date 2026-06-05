@@ -1,0 +1,33 @@
+.fp-login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sds-color-background-default-secondary, #fafafa);
+}
+.fp-login-card {
+  width: 360px;
+  padding: var(--sds-size-space-700, 28px);
+  background: var(--sds-color-background-default-default, #ffffff);
+  border: 1px solid var(--sds-color-border-default-default, #e6e6e6);
+  border-radius: var(--sds-size-radius-200, 8px);
+  box-shadow: var(--sds-effect-shadow-200, 0 1px 2px rgba(0, 0, 0, 0.04));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-size-space-300, 12px);
+}
+.fp-login-h1 {
+  font-size: 18px;
+  margin: 0;
+  font-weight: 600;
+  color: var(--sds-color-text-default-default, #1a1a1a);
+}
+.fp-login-sub {
+  color: var(--sds-color-text-default-secondary, #6b6b6b);
+  margin: 0;
+  font-size: 13px;
+}
+.fp-login-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+/* `.fp-err` — defined once globally in app.css. */

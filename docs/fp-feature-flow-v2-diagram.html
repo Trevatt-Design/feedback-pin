@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fp-feature pipeline — flow diagram</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --surface-2: #fafaf8;
+    --border: #d4d4cc;
+    --border-strong: #a8a89e;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --muted-2: #8b8b8b;
+
+    --c-skill: #2563EB;
+    --c-skill-bg: #eaf0ff;
+    --c-agent: #10B981;
+    --c-agent-bg: #e7f7f1;
+    --c-inline: #6B7280;
+    --c-inline-bg: #efefee;
+    --c-handback: #D97706;
+    --c-handback-bg: #fdf3e2;
+    --c-loop: #DC2626;
+    --c-loop-bg: #fdecea;
+    --c-light: #0891b2;
+    --c-light-bg: #cffafe;
+    --c-output: #7c3aed;
+
+    --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 32px 24px 60px; }
+  h1 { margin: 0 0 18px; font-size: 22px; letter-spacing: -0.01em; font-weight: 600; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 28px;
+  }
+  .legend .item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); padding: 2px 8px; }
+  .legend .swatch { width: 10px; height: 10px; border-radius: 3px; }
+  .legend .item strong { color: var(--fg); font-weight: 600; }
+
+  .scroller { overflow-x: auto; }
+  .canvas {
+    position: relative;
+    width: 1100px;
+    height: 1640px;
+    margin: 0 auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 28px rgba(0,0,0,0.05);
+  }
+
+  /* Z-index hierarchy:
+       group containers : 1 (bottom)
+       svg edges        : 2 (lines above groups)
+       node cards       : 3 (cards on top)
+       edge labels      : 4 (labels on top of everything)
+  */
+  svg.edges {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .node {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 14px rgba(0,0,0,0.04);
+    padding: 10px 14px;
+    text-align: center;
+    z-index: 3;
+  }
+  .node .title { font-weight: 600; font-size: 13px; line-height: 1.25; }
+  .node .sub { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+  .node .tag {
+    display: inline-block; font: 600 9px var(--font); letter-spacing: 0.06em;
+    text-transform: uppercase; padding: 1px 6px; border-radius: 999px;
+    margin-bottom: 4px;
+  }
+
+  .node.skill { border-color: var(--c-skill); }
+  .node.skill .tag { background: var(--c-skill-bg); color: var(--c-skill); }
+  .node.agent { border-color: var(--c-agent); }
+  .node.agent .tag { background: var(--c-agent-bg); color: var(--c-agent); }
+  .node.inline { border-color: var(--border-strong); }
+  .node.inline .tag { background: var(--c-inline-bg); color: var(--c-inline); }
+  .node.gate { border-color: var(--c-loop); background: var(--c-loop-bg); }
+  .node.gate .tag { background: #fff; color: var(--c-loop); border: 1px solid var(--c-loop); }
+  .node.trigger { background: #fff7e0; border-color: #d4ad4d; border-radius: 999px; padding: 8px 22px; }
+  .node.trigger .title { color: #6b5300; }
+  .node.handback { background: var(--c-handback-bg); border-color: #d49a3a; border-radius: 999px; padding: 8px 22px; }
+  .node.handback .title { color: #6b4502; }
+  .node.classifier { border-color: var(--c-light); background: #fff; border-radius: 999px; }
+  .node.classifier .tag { background: var(--c-light-bg); color: var(--c-light); }
+
+  /* Tiny "to user" badges sitting at the end of each gate's hand-back arrow */
+  .exit-badge {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: var(--c-handback-bg);
+    color: var(--c-handback);
+    border: 1px solid #d49a3a;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font: 600 10px var(--font);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    z-index: 3;
+    white-space: nowrap;
+  }
+
+  .group {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: var(--surface-2);
+    border: 1px dashed var(--border-strong);
+    border-radius: 14px;
+    padding: 14px 12px 12px;
+    z-index: 1;
+  }
+  .group-label {
+    position: absolute;
+    top: -10px; left: 14px;
+    background: var(--surface);
+    color: var(--muted-2);
+    font: 600 10px var(--font); letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 0 8px;
+  }
+  .group-grid { display: grid; gap: 8px; }
+  .group.s3 .group-grid { grid-template-columns: repeat(4, 1fr); }
+  .group.s6 .group-grid { grid-template-columns: repeat(2, 1fr); }
+  .mini {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--c-skill);
+    border-radius: 8px;
+    padding: 7px 10px;
+    text-align: left;
+    min-width: 130px;
+  }
+  .mini h4 { margin: 0 0 2px; font-size: 12px; font-weight: 600; }
+  .mini p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.3; }
+
+  .edge-label {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: var(--bg);
+    padding: 1px 7px;
+    font: 600 10px var(--font);
+    letter-spacing: 0.04em;
+    border-radius: 999px;
+    z-index: 4;
+    white-space: nowrap;
+  }
+  .edge-label.handback { color: var(--c-handback); border: 1px solid #e7c684; background: var(--c-handback-bg); }
+  .edge-label.loop { color: var(--c-loop); border: 1px solid #e7adaa; background: var(--c-loop-bg); }
+  .edge-label.light { color: var(--c-light); border: 1px solid #92c8d4; background: var(--c-light-bg); }
+  .edge-label.main { color: var(--muted); border: 1px solid var(--border); background: var(--surface); }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<h1>fp-feature pipeline</h1>
+
+<div class="legend">
+  <div class="item"><span class="swatch" style="background: var(--c-skill);"></span><strong>Skill</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-agent);"></span><strong>Agent</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-inline);"></span><strong>Inline</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-loop);"></span><strong>Gate / loop</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-handback);"></span><strong>Hand back</strong></div>
+  <div class="item"><span class="swatch" style="background: var(--c-light);"></span><strong>Lightweight branch</strong></div>
+</div>
+
+<div class="scroller">
+<div class="canvas">
+
+  <svg class="edges" viewBox="0 0 1100 1640" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin meet">
+    <defs>
+      <marker id="arrow-main" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#a8a89e"/>
+      </marker>
+      <marker id="arrow-light" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#0891b2"/>
+      </marker>
+      <marker id="arrow-handback" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#D97706"/>
+      </marker>
+      <marker id="arrow-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#DC2626"/>
+      </marker>
+    </defs>
+
+    <!-- ===== Main flow (vertical, x=550) ===== -->
+    <path d="M 550 80 V 128"   stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 200 V 260"  stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 332 V 380"  stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 450 V 482"  stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 562 V 610"  stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 682 V 723"  stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 808 V 878"  stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 952 V 998"  stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 1072 V 1119" stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 1200 V 1273" stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 1349 V 1398" stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+    <path d="M 550 1448 V 1494" stroke="#a8a89e" stroke-width="2" fill="none" marker-end="url(#arrow-main)"/>
+
+    <!-- ===== Lightweight bypass 1: conflict scan → engineer (skips Stage 3) ===== -->
+    <!-- Departs left from conflict scan, runs down at x=140, joins engineer's left edge -->
+    <path d="M 470 660 C 240 660, 140 700, 140 760 C 140 870, 240 915, 423 915"
+          stroke="#0891b2" stroke-width="2" fill="none" stroke-dasharray="6 4" marker-end="url(#arrow-light)"/>
+
+    <!-- ===== Lightweight bypass 2: test → integrator (skips Stage 6) ===== -->
+    <path d="M 470 1035 C 240 1035, 140 1080, 140 1160 C 140 1260, 240 1310, 383 1310"
+          stroke="#0891b2" stroke-width="2" fill="none" stroke-dasharray="6 4" marker-end="url(#arrow-light)"/>
+
+    <!-- ===== Hand-back exits (short, exit right per gate, end with arrow into a 'TO USER' badge) ===== -->
+    <path d="M 660 297 H 868"
+          stroke="#D97706" stroke-width="1.8" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-handback)"/>
+    <path d="M 660 415 H 868"
+          stroke="#D97706" stroke-width="1.8" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-handback)"/>
+    <path d="M 660 645 H 868"
+          stroke="#D97706" stroke-width="1.8" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-handback)"/>
+
+    <!-- ===== Stage 3 self-loop: revise plan → re-run stage 3 ===== -->
+    <!-- Loops out the right edge of the Stage 3 group at x=900 -->
+    <path d="M 900 740 C 970 740, 970 800, 900 800"
+          stroke="#DC2626" stroke-width="1.8" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-loop)"/>
+
+    <!-- ===== Stage 5 → engineer loop: suite red ===== -->
+    <path d="M 430 1010 C 360 1010, 360 920, 423 920"
+          stroke="#DC2626" stroke-width="1.8" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-loop)"/>
+
+  </svg>
+
+  <!-- ============================================================
+       NODES
+       ============================================================ -->
+
+  <div class="node trigger" style="top: 60px; left: 550px; width: 200px;">
+    <div class="title">▶ User brief</div>
+  </div>
+
+  <div class="node inline" style="top: 165px; left: 550px; width: 360px;">
+    <div class="tag">inline · orchestrator</div>
+    <div class="title">Pre-flight — load context</div>
+    <div class="sub">manifest · invariants.map · followups · decisions/&lt;mo&gt; · plans</div>
+  </div>
+
+  <div class="node gate" style="top: 297px; left: 550px; width: 220px;">
+    <div class="tag">stage 0 · gate</div>
+    <div class="title">Pre-flight drift check</div>
+    <div class="sub">manifest ↔ code consistency</div>
+  </div>
+
+  <div class="node skill" style="top: 415px; left: 550px; width: 220px;">
+    <div class="tag">stage 1 · skill</div>
+    <div class="title">shape · brief intake</div>
+    <div class="sub">restate need · surfaces · gaps</div>
+  </div>
+
+  <div class="node classifier" style="top: 522px; left: 550px; width: 240px;">
+    <div class="tag">stage 1b · classifier</div>
+    <div class="title">Weight: lightweight or full?</div>
+    <div class="sub">visual / token-only changes go lightweight</div>
+  </div>
+
+  <div class="node inline" style="top: 645px; left: 550px; width: 220px;">
+    <div class="tag">stage 2 · inline</div>
+    <div class="title">Conflict scan</div>
+    <div class="sub">anti-features · invariants to preserve</div>
+  </div>
+
+  <!-- Stage 3 group (full only) -->
+  <div class="group s3" style="top: 765px; left: 550px; width: 700px;">
+    <div class="group-label">stage 3 — specialists (parallel · full only)</div>
+    <div class="group-grid">
+      <div class="mini"><h4>security-review</h4><p>Auth · validation · leakage · deps · secrets</p></div>
+      <div class="mini"><h4>audit</h4><p>a11y · perf · responsive</p></div>
+      <div class="mini"><h4>adapt</h4><p>browser · iframe · CORS</p></div>
+      <div class="mini"><h4>critique</h4><p>UX · copy · audience</p></div>
+    </div>
+  </div>
+
+  <div class="node agent" style="top: 915px; left: 550px; width: 240px;">
+    <div class="tag">stage 4 · agent</div>
+    <div class="title">engineer · implementation</div>
+    <div class="sub">writes widget · api · dashboard src · tsc --noEmit</div>
+  </div>
+
+  <div class="node agent" style="top: 1035px; left: 550px; width: 240px;">
+    <div class="tag">stage 5 · agent</div>
+    <div class="title">test</div>
+    <div class="sub">unit · api · e2e — must be green</div>
+  </div>
+
+  <!-- Stage 6 group (full only) -->
+  <div class="group s6" style="top: 1160px; left: 550px; width: 420px;">
+    <div class="group-label">stage 6 — quality pass (parallel · full only)</div>
+    <div class="group-grid">
+      <div class="mini"><h4>simplify</h4><p>reuse · dead code</p></div>
+      <div class="mini"><h4>harden</h4><p>error / empty / edge states</p></div>
+    </div>
+  </div>
+
+  <div class="node agent" style="top: 1310px; left: 550px; width: 320px;">
+    <div class="tag">stage 7 · agent</div>
+    <div class="title">integrator</div>
+    <div class="sub">manifest · invariants.map · decisions/&lt;mo&gt; · followups · report</div>
+  </div>
+
+  <div class="node skill" style="top: 1422px; left: 550px; width: 220px;">
+    <div class="tag">stage 8 · skill</div>
+    <div class="title">review · final gate</div>
+  </div>
+
+  <div class="node handback" style="top: 1518px; left: 550px; width: 220px;">
+    <div class="title">Hand back to user ✋</div>
+  </div>
+
+  <!-- Hand-back exit badges at the end of each gate's right-going arrow -->
+  <div class="exit-badge" style="top: 297px; left: 935px;">to user ✋</div>
+  <div class="exit-badge" style="top: 415px; left: 935px;">to user ✋</div>
+  <div class="exit-badge" style="top: 645px; left: 935px;">to user ✋</div>
+
+  <!-- ============================================================
+       EDGE LABELS
+       ============================================================ -->
+  <div class="edge-label handback" style="top: 297px; left: 760px;">if drift</div>
+  <div class="edge-label handback" style="top: 415px; left: 760px;">if blocking gaps</div>
+  <div class="edge-label handback" style="top: 645px; left: 760px;">if anti-feature</div>
+
+  <div class="edge-label loop" style="top: 770px; left: 980px;">↺ revise + re-run</div>
+  <div class="edge-label loop" style="top: 965px; left: 360px;">↺ suite red</div>
+
+  <div class="edge-label light" style="top: 770px; left: 140px;">lightweight ↓</div>
+  <div class="edge-label light" style="top: 1170px; left: 140px;">lightweight ↓</div>
+
+  <div class="edge-label main" style="top: 695px; left: 580px;">full ↓</div>
+  <div class="edge-label main" style="top: 1095px; left: 580px;">full ↓</div>
+
+</div>
+</div>
+
+</div>
+</body>
+</html>

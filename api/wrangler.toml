@@ -1,0 +1,19 @@
+name = "feedback-pin-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# D1 binding — fill database_id after `wrangler d1 create feedback-pin`
+[[d1_databases]]
+binding = "DB"
+database_name = "feedback-pin"
+database_id = "129c4406-11a1-47fe-a482-43b1bf37a26a"
+
+# R2 binding for screenshots
+[[r2_buckets]]
+binding = "SCREENSHOTS"
+bucket_name = "feedback-pin-screenshots"
+
+[vars]
+# default rate limits, override per-env
+MAX_COMMENT_BYTES = "10000"
+MAX_SCREENSHOT_BYTES = "2000000"

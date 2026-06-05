@@ -1,0 +1,28 @@
+.fp-app {
+  display: flex;
+  min-height: 100vh;
+}
+.fp-app-main {
+  flex: 1;
+  padding: var(--sds-size-space-700, 28px) var(--sds-size-space-800, 32px);
+  max-width: 100%;
+  overflow: auto;
+}
+.fp-app-main:focus {
+  outline: none;
+}
+.fp-h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--sds-color-text-default-default, #1a1a1a);
+}
+/* Subtitle paragraph. Consumes the SDS secondary text token; the dashboard
+   overrides that token to gray-600 in app.css so all secondary text on a
+   white background passes WCAG AA contrast (was gray-500 / #757575,
+   ~4.48:1 — under the 4.5:1 AA bound; axe flagged this <p> specifically). */
+.fp-h-sub {
+  color: var(--sds-color-text-default-secondary, #444444);
+  margin: 0 0 var(--sds-size-space-600, 24px);
+}
+/* `.fp-err` — defined once globally in app.css. */

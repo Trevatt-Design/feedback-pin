@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feedback-pin — smoke test</title>
+<style>
+  :root { --fg: #1a1a1a; --muted: #6b6b6b; --bg: #fafafa; --accent: #1f5f6b; --border: #e6e6e6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); }
+  header { padding: 56px 24px 32px; max-width: 760px; margin: 0 auto; border-bottom: 1px solid var(--border); }
+  h1 { font-size: 32px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .lede { color: var(--muted); margin: 0; font-size: 17px; }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 24px 120px; display: flex; flex-direction: column; gap: 36px; }
+  section { display: flex; flex-direction: column; gap: 12px; }
+  h2 { font-size: 20px; margin: 0; }
+  p { margin: 0; }
+  .card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid > div { padding: 18px; background: #fff; border: 1px solid var(--border); border-radius: 10px; }
+  .cta { display: inline-flex; gap: 10px; align-items: center; height: 44px; padding: 0 18px; border-radius: 8px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 500; }
+  img { max-width: 100%; border-radius: 8px; display: block; }
+  .picture-placeholder { aspect-ratio: 16/9; background: linear-gradient(135deg, #d6e0e2, #b3c5c8); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #345b62; font-weight: 500; }
+  footer { max-width: 760px; margin: 0 auto; padding: 24px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); }
+  ul { padding-left: 20px; }
+  blockquote { margin: 0; padding: 14px 18px; border-left: 3px solid var(--accent); background: #eef4f5; border-radius: 0 8px 8px 0; color: var(--fg); }
+  /* a few intentional class-named elements for selector testing */
+  .price-tag { font-weight: 600; color: var(--accent); }
+  .hero-tagline { font-size: 18px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Smoke test page</h1>
+  <p class="lede hero-tagline">A handful of varied elements to click on and comment about. None of this content matters — it's just a target for feedback-pin.</p>
+</header>
+
+<main>
+  <section>
+    <h2>Card with text</h2>
+    <div class="card">
+      <p>This card has a paragraph inside it. Try leaving a comment on the heading above, this paragraph, and the card border itself. Each should pin to a different element and resolve cleanly.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Two-column grid</h2>
+    <div class="grid">
+      <div>
+        <strong>Column one</strong>
+        <p>Some text in column one. The widget should pick the inner div, not the grid container, when you hover narrowly.</p>
+      </div>
+      <div>
+        <strong>Column two</strong>
+        <p>Column two has a <span class="price-tag">£99 price tag</span> inside the paragraph. Try clicking that span specifically.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Image and call to action</h2>
+    <div class="picture-placeholder">image placeholder</div>
+    <p><a href="#" class="cta">Primary action</a></p>
+    <blockquote>"Feedback that doesn't survive a layout change is feedback you'll lose." — the whole point of hybrid anchoring.</blockquote>
+  </section>
+
+  <section>
+    <h2>List of items</h2>
+    <ul>
+      <li>One — a list item.</li>
+      <li>Two — try commenting on this specific bullet.</li>
+      <li>Three — and this one.</li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  Open the dashboard at <a href="http://localhost:8788" target="_blank" rel="noopener">http://localhost:8788</a> to triage comments. Edit <code>smoke-test/index.html</code> to inject your local token.
+</footer>
+
+<!--
+  feedback-pin widget.
+  Replace the data attributes after running:
+    1. cd api && npx wrangler dev          (API on :8787)
+    2. node scripts/create-project.mjs --name "Smoke"     (token printed)
+    3. cd dashboard && npx wrangler dev --port 8788       (dashboard on :8788)
+  Update data-project-token below with the token.
+-->
+<script src="../widget/dist/feedback-pin.js"
+        data-project-token="fpt_52c5dbdd0f66b5f9899706d4679d58cfa71f704e"
+        data-api="http://localhost:8787"
+        defer></script>
+
+</body>
+</html>
