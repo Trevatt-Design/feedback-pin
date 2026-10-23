@@ -338,19 +338,19 @@ test.describe("widget standalone sidebar — triage statuses", () => {
     // Switch to "All" so the wont-fix pin is observable in the DOM.
     await page.evaluate(() => {
       const sr = (document.querySelector("[data-feedback-pin]") as HTMLElement).shadowRoot!;
-      const allBtn = sr.querySelector<HTMLButtonElement>('[data-filter="all"]')!;
-      allBtn.click();
+      const sw = sr.querySelector<HTMLInputElement>("[data-show-resolved]")!;
+      sw.checked = true; sw.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
     // Resolved tab buckets resolved + wont-fix.
     await page.evaluate(() => {
       const sr = (document.querySelector("[data-feedback-pin]") as HTMLElement).shadowRoot!;
-      const btn = sr.querySelector<HTMLButtonElement>('[data-filter="resolved"]')!;
-      btn.click();
+      // Closed rows (is-closed) bucket resolved + wont-fix; the switch above
+      // makes them visible alongside the open ones.
     });
     const resolvedTexts = await page.evaluate(() => {
       const sr = (document.querySelector("[data-feedback-pin]") as HTMLElement).shadowRoot!;
-      return Array.from(sr.querySelectorAll(".fp-item .fp-item-text")).map(e => (e.textContent || "").trim());
+      return Array.from(sr.querySelectorAll(".fp-item.is-closed .fp-item-text")).map(e => (e.textContent || "").trim());
     });
     expect(resolvedTexts.sort()).toEqual(["Resolved one", "Won't-fix one"].sort());
 

@@ -37,10 +37,14 @@ export function Login() {
   return (
     <div className="fp-login">
       <form className="fp-login-card" onSubmit={submit}>
-        <h1 className="fp-login-h1">feedback-pin</h1>
-        <p className="fp-login-sub">
-          Enter the project token to view comments.
-        </p>
+        <span className="fp-login-mark" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="18" height="18">
+            <path d="M8 1.5a5 5 0 0 0-5 5c0 3.6 5 8 5 8s5-4.4 5-8a5 5 0 0 0-5-5Z" fill="#fff" />
+            <circle cx="8" cy="6.5" r="1.8" fill="#171717" />
+          </svg>
+        </span>
+        <h1 className="fp-login-h1">Sign in to feedback-pin</h1>
+        <p className="fp-login-sub">Paste the project token.</p>
         {err ? (
           <div className="fp-err" role="alert">
             {err}

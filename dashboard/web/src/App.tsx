@@ -5,6 +5,7 @@
  *   #/login          → Login form
  *   #/comments       → CommentsList (Sidebar + list panel)
  *   #/comments/:id   → CommentDetail
+ *   #/review         → Review (triaged items, decisions, stages)
  *   default          → CommentsList if a token exists, else Login
  *
  * After every hash-route change, focus moves to the <main id="main">
@@ -18,6 +19,7 @@ import { TOKEN_KEY } from "./lib/api";
 import { Login } from "./routes/Login";
 import { CommentsList } from "./routes/CommentsList";
 import { CommentDetail } from "./routes/CommentDetail";
+import { Review } from "./routes/Review";
 
 function readToken(): string | null {
   try {
@@ -40,6 +42,9 @@ export function App() {
 
   if (!token || path === "/login") {
     return <Login />;
+  }
+  if (path === "/review") {
+    return <Review />;
   }
   if (path.startsWith("/comments/")) {
     const id = path.slice("/comments/".length);

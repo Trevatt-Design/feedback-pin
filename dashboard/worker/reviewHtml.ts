@@ -48,19 +48,19 @@ export function reviewHtml(apiUrl: string): string {
      /review stays self-contained (it doesn't link the dashboard's CSS). */
   :root {
     color-scheme: light;
-    --bg: var(--sds-color-background-default-secondary, #FAF9F6);
+    --bg: var(--sds-color-background-default-secondary, #fafafa);
     --surface: var(--sds-color-background-default-default, #fff);
-    --fg: var(--sds-color-text-default-default, #111);
-    --muted: var(--sds-color-text-default-secondary, #6b6b6b);
-    --border: var(--sds-color-border-default-default, rgba(0,0,0,0.10));
+    --fg: var(--sds-color-text-default-default, #171717);
+    --muted: var(--sds-color-text-default-secondary, #5f5f5f);
+    --border: var(--sds-color-border-default-default, #ebebeb);
     --soft: var(--sds-color-border-default-secondary, rgba(0,0,0,0.06));
-    --hl: var(--sds-color-background-info-default, var(--sds-color-background-brand-default, #2563EB));
-    --hl-soft: var(--sds-color-background-brand-tertiary, rgba(37,99,235,0.20));
-    --shadow: var(--sds-effect-shadow-300, 0 6px 24px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.04));
-    --radius: var(--sds-size-radius-300, 14px);
-    --radius-sm: var(--sds-size-radius-200, 10px);
+    --hl: var(--sds-color-background-info-default, var(--sds-color-background-brand-default, #0068d6));
+    --hl-soft: var(--sds-color-background-brand-tertiary, rgba(0,104,214,0.18));
+    --shadow: var(--sds-effect-shadow-300, 0 0 0 1px rgba(0,0,0,0.04), 0 4px 8px -4px rgba(0,0,0,0.06), 0 12px 24px -8px rgba(0,0,0,0.10));
+    --radius: var(--sds-size-radius-300, 12px);
+    --radius-sm: var(--sds-size-radius-200, 6px);
     --pill: 999px;
-    --font: var(--sds-font-family-base, -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif);
+    --font: var(--sds-font-family-base, "Geist", "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
   }
   *, *::before, *::after { box-sizing: border-box; }
   html, body, #root { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.4 var(--font); }
@@ -76,15 +76,15 @@ export function reviewHtml(apiUrl: string): string {
   .url { font: 400 12px var(--font); color: var(--muted); flex: 1; max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .seg {
     display: inline-flex; padding: 3px;
-    background: var(--sds-color-background-default-secondary, #efeee9); border-radius: var(--pill);
+    background: var(--sds-color-background-default-secondary, #f2f2f2); border-radius: 8px; border: 1px solid var(--border);
   }
   .seg button {
     appearance: none; border: none; background: transparent;
-    height: 30px; padding: 0 12px; border-radius: var(--pill);
+    height: 28px; padding: 0 10px; border-radius: 6px;
     font: 500 12px var(--font); color: var(--muted); cursor: pointer;
     display: inline-flex; align-items: center; gap: 6px;
   }
-  .seg button.is-active { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .seg button.is-active { background: var(--surface); color: var(--fg); box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(0,0,0,0.06); }
   .seg svg { width: 14px; height: 14px; }
   /* Numeric width input. Tight, right-aligned digits; "px" suffix is decorative
      text NOT inside the input (so it doesn't compete for caret space). */

@@ -43,6 +43,11 @@ async function init(opts: InitOptions) {
     console.warn("[feedback-pin] failed to load comments:", (e as Error).message);
   }
 
+  // Follow client-side navigation (React Router, Next, etc). History pushes
+  // and pops don't reload the page, so re-derive the URL and swap the
+  // comment set whenever it changes. Explicit pageUrl opts out.
+  if (!opts.pageUrl) watchNavigation(api, () => ui);
+
   // postMessage handshake for review-wrapper detection.
   // Wrapper sends { type: "fp:wrapper-hello" }; we respond with { type: "fp:widget-ready" }.
   window.addEventListener("message", (e) => {
@@ -53,6 +58,38 @@ async function init(opts: InitOptions) {
   });
   // Announce presence to a parent if there is one.
   try { if (window.parent && window.parent !== window) window.parent.postMessage({ type: "fp:widget-ready", uid, pageUrl }, "*"); } catch {}
+}
+
+function watchNavigation(api: FeedbackPinApi, getUi: () => WidgetUI | null) {
+  let timer: number | undefined;
+  let inFlight = 0;
+  const check = () => {
+    window.clearTimeout(timer);
+    // Let the router commit the new DOM before anchors are resolved.
+    timer = window.setTimeout(async () => {
+      const u = getUi();
+      if (!u) return;
+      const next = normalisedPageUrl();
+      if (next === u.pageUrl) return;
+      const seq = ++inFlight;
+      let comments: Awaited<ReturnType<FeedbackPinApi["listComments"]>> = [];
+      try { comments = await api.listComments(next, "all"); }
+      catch (e) { console.warn("[feedback-pin] failed to load comments:", (e as Error).message); }
+      if (seq !== inFlight || normalisedPageUrl() !== next) return; // superseded
+      u.setPage(next, comments);
+    }, 250);
+  };
+  const wrap = (name: "pushState" | "replaceState") => {
+    const orig = history[name];
+    history[name] = function (this: History, ...args: Parameters<History["pushState"]>) {
+      const r = orig.apply(this, args);
+      check();
+      return r;
+    } as History[typeof name];
+  };
+  wrap("pushState");
+  wrap("replaceState");
+  window.addEventListener("popstate", check);
 }
 
 function normalisedPageUrl(): string {

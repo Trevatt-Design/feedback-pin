@@ -1,0 +1,5 @@
+node_modules/
+.wrangler/
+# The dashboard ships prebuilt; host repos often ignore dist/.
+!dashboard/web/dist/
+!dashboard/web/dist/**

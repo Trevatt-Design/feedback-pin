@@ -1,47 +1,61 @@
-/* `.controls` is the row that holds the search input + sort select.
-   Class names drop the `fp-` prefix because the e2e suite targets the
-   raw structural selectors `.controls .search` and `#fp-comments-sort`
-   (see tests/e2e/sidebar-triage.spec.ts). The shape matches the wrapper
-   `/review` sidebar's `.sidebar-controls` so the visual rhythm is
-   consistent across surfaces. */
+/* `.controls` holds the search input and sort select. Unprefixed hooks
+   `.controls .search` and `#fp-comments-sort` are e2e selectors
+   (tests/e2e/sidebar-triage.spec.ts). The select itself is styled with
+   the shared .fp-select rules in app.css. */
 .controls {
   display: flex;
-  gap: var(--sds-size-space-300, 12px);
+  gap: 8px;
   align-items: center;
-  margin-bottom: var(--sds-size-space-400, 16px);
+  margin-bottom: 16px;
+}
+.controls-search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.controls-search svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  color: var(--fp-fg-3);
+  pointer-events: none;
 }
 .controls .search {
   flex: 1;
   min-width: 0;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 40px 0 32px;
+  border: 1px solid var(--fp-line-strong);
+  border-radius: var(--fp-radius);
+  background: var(--fp-surface);
+  font-family: var(--fp-font);
+  font-size: 13px;
+  color: var(--fp-fg);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.controls .search::placeholder {
+  color: var(--fp-fg-3);
+}
+.controls .search:hover {
+  border-color: #b5b5b5;
+}
+.controls .search:focus {
+  outline: none;
+  border-color: var(--fp-fg-2);
+  box-shadow: var(--fp-ring);
+}
+.controls-search .fp-kbd {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  margin-top: -10px;
+  pointer-events: none;
 }
 .controls .sort {
-  appearance: none;
-  -webkit-appearance: none;
-  height: 36px;
-  padding: 0 28px 0 10px;
-  border: 1px solid var(--sds-color-border-default-default, #e6e6e6);
-  border-radius: var(--sds-size-radius-100, 4px);
-  background: var(--sds-color-background-default-default, #ffffff);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%236b6b6b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  font: var(--sds-font-body-small, 400 12px sans-serif);
-  color: var(--sds-color-text-default-default, #1a1a1a);
-  cursor: pointer;
-  outline: none;
-}
-.controls .sort:focus {
-  border-color: var(--sds-color-border-brand-default, #1a1a1a);
-  box-shadow: 0 0 0 3px var(--sds-color-background-brand-tertiary, rgba(31, 95, 107, 0.15));
-}
-.fp-visually-hidden {
-  position: absolute !important;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+  height: 32px;
 }

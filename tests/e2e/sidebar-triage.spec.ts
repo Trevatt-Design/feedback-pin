@@ -243,11 +243,11 @@ test.describe("widget sidebar triage (standalone)", () => {
     await stubWidgetApi(page, WIDGET_COMMENTS);
     await loadSmokeTest(page);
 
-    // Switch to "All" so the resolved comment is visible.
+    // Turn on "Show resolved" so the resolved comment is visible.
     await page.evaluate(() => {
       const sr = (document.querySelector("[data-feedback-pin]") as HTMLElement).shadowRoot!;
-      const allBtn = sr.querySelector<HTMLButtonElement>('[data-filter="all"]')!;
-      allBtn.click();
+      const sw = sr.querySelector<HTMLInputElement>("[data-show-resolved]")!;
+      sw.checked = true; sw.dispatchEvent(new Event("change", { bubbles: true }));
       const sel = sr.querySelector<HTMLSelectElement>("[data-sort]")!;
       sel.value = "unresolved";
       sel.dispatchEvent(new Event("change", { bubbles: true }));

@@ -4,38 +4,80 @@
  * stays global across groups (per the dashboard-list invariant
  * `pin-numbering-stays-global-across-groups`).
  *
- * The flat fallback path is also exposed via `CommentList` for callers
- * that explicitly want flat (e.g. when grouping is disabled by data).
- *
- * Row density is compact (Stage 3 amendment): row padding =
- * --sds-size-space-200 (~8px), body text 13px, meta text body-small.
+ * Each row: screenshot thumbnail cropped to the pin, the comment, then
+ * status · author · time. Rows are real <button>s (axe nested-interactive).
  */
 import { useState } from "react";
 import { Tag } from "primitives";
 import "./GroupedCommentList.css";
-import { fmtTime, isClosedStatus, urlPathname, type Comment } from "../lib/api";
+import {
+  isClosedStatus,
+  screenshotUrl,
+  statusLabel,
+  type Comment,
+} from "../lib/api";
+import { authorName, displayPath, fmtFull, fmtShort, pinFraction } from "../lib/format";
 import { StatusPill } from "./StatusPill";
+import { IconImage, IconInbox } from "./icons";
 
 export interface GroupedCommentListProps {
   items: Comment[];
   onOpen: (id: string) => void;
   emptyMessage: string;
+  emptyHint?: string;
 }
 
-export function CommentList({ items, onOpen, emptyMessage }: GroupedCommentListProps) {
-  if (!items.length) {
-    return (
-      <div className="card list">
-        <div className="list-empty">{emptyMessage}</div>
+function Empty({ message, hint }: { message: string; hint?: string }) {
+  return (
+    <div className="card list">
+      <div className="list-empty">
+        <span className="list-empty-icon">
+          <IconInbox />
+        </span>
+        <div className="list-empty-title">{message}</div>
+        {hint ? <div className="list-empty-hint">{hint}</div> : null}
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+export function CommentList({ items, onOpen, emptyMessage, emptyHint }: GroupedCommentListProps) {
+  if (!items.length) return <Empty message={emptyMessage} hint={emptyHint} />;
   return (
     <div className="card list">
       {items.map((c, i) => (
-        <CommentRow key={c.id} c={c} n={i + 1} onOpen={onOpen} />
+        <CommentRow key={c.id} c={c} n={i + 1} onOpen={onOpen} showPath />
       ))}
     </div>
+  );
+}
+
+function Thumb({ c }: { c: Comment }) {
+  const [broken, setBroken] = useState(false);
+  const x = pinFraction(c.x_pct);
+  const y = pinFraction(c.y_pct);
+  if (!c.screenshot_key || broken) {
+    return (
+      <span className="list-thumb is-empty" aria-hidden="true">
+        <IconImage />
+      </span>
+    );
+  }
+  const pos = x != null && y != null ? `${(x * 100).toFixed(1)}% ${(y * 100).toFixed(1)}%` : "50% 0%";
+  return (
+    <span className="list-thumb" aria-hidden="true">
+      <img
+        src={screenshotUrl(c.screenshot_key)}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        style={{ objectPosition: pos }}
+        onError={() => setBroken(true)}
+      />
+      {x != null && y != null ? (
+        <span className="list-thumb-pin" style={{ left: `${x * 100}%`, top: `${y * 100}%` }} />
+      ) : null}
+    </span>
   );
 }
 
@@ -43,52 +85,55 @@ interface CommentRowProps {
   c: Comment;
   n: number;
   onOpen: (id: string) => void;
+  showPath?: boolean;
 }
-/**
- * Row container is a real <button>. axe's `nested-interactive` rule
- * fires when an element with role=button contains a focusable child
- * (e.g. an <a href>); the previous shape (a div with role=button
- * holding an inline page-URL anchor) tripped the rule. Now the row IS
- * a button, the URL pathname displays as static text, and there are
- * no focusable descendants.
- */
-function CommentRow({ c, n, onOpen }: CommentRowProps) {
+
+function CommentRow({ c, n, onOpen, showPath }: CommentRowProps) {
+  const closed = isClosedStatus(c.status);
   return (
     <button
       type="button"
-      className={"list-item" + (isClosedStatus(c.status) ? " is-closed" : "")}
+      className={"list-item" + (closed ? " is-closed" : "")}
+      data-comment-id={c.id}
       onClick={() => onOpen(c.id)}
     >
-      <div className="list-num">{n}</div>
+      <Thumb c={c} />
       <div className="list-body">
         <div className="ti">{c.change_text}</div>
         <div className="list-meta">
+          <span className="list-status">
+            <StatusPill status={c.status} />
+            <span>{statusLabel(c.status)}</span>
+          </span>
           {c.site_wide ? (
             <Tag scheme="brand" variant="primary">
               Site-wide
             </Tag>
           ) : null}
-          <StatusPill status={c.status} />
-          <span>{c.anon_id ? c.anon_id.slice(0, 6) : "Anonymous"}</span>
-          <span aria-hidden="true">·</span>
-          <span>{fmtTime(c.created_at)}</span>
-          <span aria-hidden="true">·</span>
-          <span className="list-meta-url">{urlPathname(c.url)}</span>
+          <span className="list-dot" aria-hidden="true" />
+          <span>{authorName(c)}</span>
+          <span className="list-dot" aria-hidden="true" />
+          <time dateTime={new Date(c.created_at).toISOString()} title={fmtFull(c.created_at)}>
+            {fmtShort(c.created_at)}
+          </time>
+          {showPath ? (
+            <>
+              <span className="list-dot" aria-hidden="true" />
+              <span className="list-meta-url">{displayPath(c.url)}</span>
+            </>
+          ) : null}
         </div>
+      </div>
+      <div className="list-num" aria-label={`Pin ${n}`}>
+        {n}
       </div>
     </button>
   );
 }
 
-export function GroupedCommentList({ items, onOpen, emptyMessage }: GroupedCommentListProps) {
+export function GroupedCommentList({ items, onOpen, emptyMessage, emptyHint }: GroupedCommentListProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  if (!items.length) {
-    return (
-      <div className="card list">
-        <div className="list-empty">{emptyMessage}</div>
-      </div>
-    );
-  }
+  if (!items.length) return <Empty message={emptyMessage} hint={emptyHint} />;
   // Build groups in first-seen order (the input is already sorted).
   const groups: { url: string; items: Comment[] }[] = [];
   const idx = new Map<string, number>();
@@ -105,9 +150,9 @@ export function GroupedCommentList({ items, onOpen, emptyMessage }: GroupedComme
     <div>
       {groups.map((g) => {
         const isOpen = !collapsed[g.url];
-        const path = urlPathname(g.url);
+        const path = displayPath(g.url);
         return (
-          <div key={g.url} className="group">
+          <section key={g.url} className="group">
             <button
               className="group-head"
               type="button"
@@ -133,7 +178,9 @@ export function GroupedCommentList({ items, onOpen, emptyMessage }: GroupedComme
               <span className="path" title={g.url}>
                 {path}
               </span>
-              <span className="group-count">{g.items.length}</span>
+              <span className="group-count">
+                {g.items.length} {g.items.length === 1 ? "comment" : "comments"}
+              </span>
             </button>
             {isOpen ? (
               <div className="card list">
@@ -142,8 +189,13 @@ export function GroupedCommentList({ items, onOpen, emptyMessage }: GroupedComme
                   return <CommentRow key={c.id} c={c} n={n} onOpen={onOpen} />;
                 })}
               </div>
-            ) : null}
-          </div>
+            ) : (
+              (() => {
+                n += g.items.length;
+                return null;
+              })()
+            )}
+          </section>
         );
       })}
     </div>

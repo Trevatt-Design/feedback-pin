@@ -49,8 +49,8 @@ function corsHeaders(origin: string | null, allowed: string | null): Record<stri
   const allow = allowed ? (origin === allowed ? origin : "") : (origin ?? "*");
   return {
     "access-control-allow-origin": allow || "null",
-    "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
-    "access-control-allow-headers": "authorization, content-type, x-fp-uid",
+    "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "access-control-allow-headers": "authorization, content-type, x-fp-uid, x-fp-actor",
     "access-control-max-age": "86400",
     "vary": "origin",
   };
@@ -266,8 +266,279 @@ async function routeServeScreenshot(_req: Request, env: Env, project: Project, k
   });
 }
 
-async function routeProjectInfo(_req: Request, _env: Env, project: Project): Promise<Response> {
-  return json({ id: project.id, name: project.name, origin: project.origin, share_token: project.share_token });
+async function routeProjectInfo(_req: Request, env: Env, project: Project): Promise<Response> {
+  // `waiting` = review items needing a decision; drives the dashboard nav badge.
+  const w = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM items WHERE project_id = ? AND stage IN ('awaiting-decision','discuss')"
+  ).bind(project.id).first<{ n: number }>().catch(() => null);
+  return json({ id: project.id, name: project.name, origin: project.origin, share_token: project.share_token, approvers: approversOf(project as Project & { approvers?: string | null }), waiting: w?.n ?? 0 });
+}
+
+// ─── Review items (api-review-items) ─────────────────────────────────────────
+//
+// An item is one thing to act on, made by triage from one or more comments.
+// Outcomes say what the check found; stages say where the item is in the loop:
+//
+//   answered, built-right          -> closed straight away (reply only)
+//   build-fix                      -> ready-to-build -> built -> closed
+//   missing, conflict              -> awaiting-decision
+//        approve -> approved -> in-figma -> ready-to-build -> built -> closed
+//        decline -> closed
+//        discuss -> discuss (decide again later)
+//
+// Decisions and the Figma sign-off (in-figma -> ready-to-build) need an actor
+// on the project's approver list. Every change is written to item_events.
+
+const ITEM_KINDS = new Set(["question", "command"]);
+const ITEM_OUTCOMES = new Set(["answered", "built-right", "build-fix", "missing", "conflict"]);
+const ITEM_STAGES = new Set([
+  "awaiting-decision", "discuss", "approved", "in-figma", "ready-to-build", "built", "closed",
+]);
+const DECISIONS: Record<string, string> = { approve: "approved", decline: "closed", discuss: "discuss" };
+/** stage -> stages it may move to through /stage (decisions use /decision). */
+const STAGE_MOVES: Record<string, { to: string[]; approverOnly: boolean }> = {
+  "approved": { to: ["in-figma"], approverOnly: false },
+  "in-figma": { to: ["ready-to-build"], approverOnly: true },
+  "ready-to-build": { to: ["built"], approverOnly: false },
+  "built": { to: ["closed", "ready-to-build"], approverOnly: false },
+};
+const OUTCOME_LABEL: Record<string, string> = {
+  "answered": "Answered",
+  "built-right": "Already built as designed",
+  "build-fix": "Build fix",
+  "missing": "Missing from the design",
+  "conflict": "Conflicts with the design",
+};
+
+function initialStage(outcome: string): string {
+  if (outcome === "answered" || outcome === "built-right") return "closed";
+  if (outcome === "build-fix") return "ready-to-build";
+  return "awaiting-decision";
+}
+
+function actorOf(req: Request): string | null {
+  const a = req.headers.get("cf-access-authenticated-user-email") || req.headers.get("x-fp-actor") || "";
+  const t = a.trim().slice(0, 120);
+  return t || null;
+}
+
+function approversOf(project: Project & { approvers?: string | null }): string[] {
+  try {
+    const v = JSON.parse(project.approvers || "[]");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch { return []; }
+}
+
+function isApprover(project: Project, actor: string | null): boolean {
+  if (!actor) return false;
+  const list = approversOf(project as Project & { approvers?: string | null });
+  if (!list.length) return true; // no list set: any named actor may decide (local use)
+  return list.some((a) => a.toLowerCase() === actor.toLowerCase());
+}
+
+async function logEvent(env: Env, itemId: string, actor: string | null, action: string, value: string | null, note: string | null) {
+  await env.DB.prepare(
+    `INSERT INTO item_events (id, item_id, actor, action, value, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(uuid(), itemId, actor, action, value, note, now()).run();
+}
+
+function jsonField(v: unknown, max = 8000): string | null {
+  if (v === undefined || v === null) return null;
+  const s = JSON.stringify(v);
+  if (s.length > max) throw new Error("field too large");
+  return s;
+}
+
+async function nextRef(env: Env, project: Project): Promise<string> {
+  const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM items WHERE project_id = ?").bind(project.id).first<{ n: number }>();
+  return "FB-" + String((row?.n ?? 0) + 1).padStart(3, "0");
+}
+
+interface CreateItemBody {
+  comment_ids?: unknown;
+  round?: unknown;
+  title?: unknown;
+  kind?: unknown;
+  outcome?: unknown;
+  verdict?: unknown;
+  design?: unknown;
+  proposal?: unknown;
+  reply?: unknown;
+}
+
+async function routeCreateItem(req: Request, env: Env, project: Project): Promise<Response> {
+  const b = await req.json().catch(() => null) as CreateItemBody | null;
+  if (!b) return err(400, "body required");
+  if (!Array.isArray(b.comment_ids) || !b.comment_ids.length || !b.comment_ids.every((x) => typeof x === "string")) return err(400, "comment_ids required");
+  if (typeof b.title !== "string" || !b.title.trim() || b.title.length > 200) return err(400, "title required");
+  if (typeof b.kind !== "string" || !ITEM_KINDS.has(b.kind)) return err(400, "invalid kind");
+  if (typeof b.outcome !== "string" || !ITEM_OUTCOMES.has(b.outcome)) return err(400, "invalid outcome");
+  if (b.kind === "question" && b.outcome !== "answered") return err(400, "a question can only be answered");
+  if (b.verdict !== undefined && (typeof b.verdict !== "string" || b.verdict.length > 4000)) return err(400, "invalid verdict");
+  const ids = b.comment_ids as string[];
+  for (const cid of ids) {
+    const c = await env.DB.prepare("SELECT id FROM comments WHERE id = ? AND project_id = ?").bind(cid, project.id).first();
+    if (!c) return err(404, "comment not found: " + cid);
+  }
+  let design: string | null, proposal: string | null;
+  try { design = jsonField(b.design); proposal = jsonField(b.proposal); } catch { return err(413, "design or proposal too large"); }
+  const id = uuid();
+  const ref = await nextRef(env, project);
+  const stage = initialStage(b.outcome);
+  const t = now();
+  const round = typeof b.round === "string" && b.round.trim() ? b.round.trim().slice(0, 40) : new Date(t).toISOString().slice(0, 10);
+  await env.DB.prepare(
+    `INSERT INTO items (id, project_id, ref, round, title, kind, outcome, verdict, design, proposal, stage, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(id, project.id, ref, round, b.title.trim(), b.kind, b.outcome, (b.verdict as string | undefined)?.trim() ?? null, design, proposal, stage, t, t).run();
+  for (const cid of ids) {
+    await env.DB.prepare("INSERT OR IGNORE INTO item_comments (item_id, comment_id) VALUES (?, ?)").bind(id, cid).run();
+  }
+  const actor = actorOf(req) ?? "triage";
+  await logEvent(env, id, actor, "created", stage, null);
+  // Reply where the comment was left, so the commenter sees the outcome.
+  const replyText = typeof b.reply === "string" && b.reply.trim()
+    ? b.reply.trim().slice(0, 4000)
+    : `${ref} · ${OUTCOME_LABEL[b.outcome]}${b.verdict ? ": " + (b.verdict as string).trim() : ""}`.slice(0, 4000);
+  for (const cid of ids) {
+    await env.DB.prepare(`INSERT INTO replies (id, comment_id, author, body, anon_id, created_at) VALUES (?, ?, 'designer', ?, NULL, ?)`)
+      .bind(uuid(), cid, replyText, t).run();
+    await syncCommentStatus(env, project, cid);
+  }
+  return json({ id, ref, stage }, { status: 201 });
+}
+
+/** A comment is resolved once every item made from it is closed, in progress otherwise. */
+async function syncCommentStatus(env: Env, project: Project, commentId: string) {
+  const r = await env.DB.prepare(
+    `SELECT COUNT(*) AS total, SUM(CASE WHEN i.stage = 'closed' THEN 1 ELSE 0 END) AS closed
+     FROM item_comments ic JOIN items i ON i.id = ic.item_id WHERE ic.comment_id = ? AND i.project_id = ?`
+  ).bind(commentId, project.id).first<{ total: number; closed: number }>();
+  if (!r || !r.total) return;
+  await setStatusOnRow(env, project, commentId, r.closed === r.total ? "resolved" : "in-progress");
+}
+
+async function syncItemComments(env: Env, project: Project, itemId: string) {
+  const { results } = await env.DB.prepare("SELECT comment_id FROM item_comments WHERE item_id = ?").bind(itemId).all<{ comment_id: string }>();
+  for (const r of results) await syncCommentStatus(env, project, r.comment_id);
+}
+
+async function routeListItems(_req: Request, env: Env, project: Project, url: URL): Promise<Response> {
+  const conditions = ["i.project_id = ?"];
+  const binds: (string | number)[] = [project.id];
+  const round = url.searchParams.get("round");
+  const stage = url.searchParams.get("stage");
+  if (round) { conditions.push("i.round = ?"); binds.push(round); }
+  if (stage && ITEM_STAGES.has(stage)) { conditions.push("i.stage = ?"); binds.push(stage); }
+  const { results } = await env.DB.prepare(
+    `SELECT i.*, (SELECT GROUP_CONCAT(comment_id) FROM item_comments WHERE item_id = i.id) AS comment_ids
+     FROM items i WHERE ${conditions.join(" AND ")} ORDER BY i.ref ASC LIMIT 500`
+  ).bind(...binds).all();
+  const rounds = await env.DB.prepare(
+    `SELECT round, COUNT(*) AS items, SUM(CASE WHEN stage IN ('awaiting-decision','discuss') THEN 1 ELSE 0 END) AS waiting
+     FROM items WHERE project_id = ? GROUP BY round ORDER BY round DESC`
+  ).bind(project.id).all();
+  return json({ items: results, rounds: rounds.results });
+}
+
+async function routeGetItem(_req: Request, env: Env, project: Project, id: string): Promise<Response> {
+  const item = await env.DB.prepare("SELECT * FROM items WHERE id = ? AND project_id = ?").bind(id, project.id).first();
+  if (!item) return err(404, "not found");
+  const comments = await env.DB.prepare(
+    `SELECT c.* FROM comments c JOIN item_comments ic ON ic.comment_id = c.id WHERE ic.item_id = ? ORDER BY c.created_at ASC`
+  ).bind(id).all();
+  const events = await env.DB.prepare("SELECT * FROM item_events WHERE item_id = ? ORDER BY created_at ASC").bind(id).all();
+  return json({ item, comments: comments.results, events: events.results, approvers: approversOf(project as Project & { approvers?: string | null }) });
+}
+
+async function routePatchItem(req: Request, env: Env, project: Project, id: string): Promise<Response> {
+  const item = await env.DB.prepare("SELECT * FROM items WHERE id = ? AND project_id = ?").bind(id, project.id).first<{ stage: string }>();
+  if (!item) return err(404, "not found");
+  const b = await req.json().catch(() => null) as Record<string, unknown> | null;
+  if (!b) return err(400, "body required");
+  const sets: string[] = [];
+  const binds: (string | number | null)[] = [];
+  if (typeof b.title === "string" && b.title.trim()) { sets.push("title = ?"); binds.push(b.title.trim().slice(0, 200)); }
+  if (typeof b.verdict === "string") { sets.push("verdict = ?"); binds.push(b.verdict.trim().slice(0, 4000)); }
+  if (typeof b.round === "string" && b.round.trim()) { sets.push("round = ?"); binds.push(b.round.trim().slice(0, 40)); }
+  try {
+    if ("design" in b) { sets.push("design = ?"); binds.push(jsonField(b.design)); }
+    if ("proposal" in b) { sets.push("proposal = ?"); binds.push(jsonField(b.proposal)); }
+  } catch { return err(413, "design or proposal too large"); }
+  if (Array.isArray(b.add_comment_ids)) {
+    for (const cid of b.add_comment_ids) {
+      if (typeof cid !== "string") continue;
+      const c = await env.DB.prepare("SELECT id FROM comments WHERE id = ? AND project_id = ?").bind(cid, project.id).first();
+      if (!c) return err(404, "comment not found: " + cid);
+      await env.DB.prepare("INSERT OR IGNORE INTO item_comments (item_id, comment_id) VALUES (?, ?)").bind(id, cid).run();
+    }
+    await syncItemComments(env, project, id);
+  }
+  if (!sets.length && !Array.isArray(b.add_comment_ids)) return err(400, "nothing to update");
+  if (sets.length) {
+    sets.push("updated_at = ?"); binds.push(now());
+    binds.push(id, project.id);
+    await env.DB.prepare(`UPDATE items SET ${sets.join(", ")} WHERE id = ? AND project_id = ?`).bind(...binds).run();
+  }
+  await logEvent(env, id, actorOf(req) ?? "triage", "triaged", null, null);
+  return json({ ok: true });
+}
+
+async function routeDecision(req: Request, env: Env, project: Project, id: string): Promise<Response> {
+  const actor = actorOf(req);
+  if (!actor) return err(401, "actor required");
+  if (!isApprover(project, actor)) return err(403, "not an approver");
+  const b = await req.json().catch(() => null) as { decision?: unknown; note?: unknown } | null;
+  if (!b || typeof b.decision !== "string" || !(b.decision in DECISIONS)) return err(400, "invalid decision");
+  const note = typeof b.note === "string" ? b.note.trim().slice(0, 4000) : "";
+  if (b.decision !== "approve" && !note) return err(400, "a note is required to decline or discuss");
+  const item = await env.DB.prepare("SELECT stage FROM items WHERE id = ? AND project_id = ?").bind(id, project.id).first<{ stage: string }>();
+  if (!item) return err(404, "not found");
+  if (item.stage !== "awaiting-decision" && item.stage !== "discuss") return err(409, "item is not waiting for a decision");
+  const stage = DECISIONS[b.decision];
+  const t = now();
+  await env.DB.prepare(
+    `UPDATE items SET decision = ?, decided_by = ?, decided_at = ?, stage = ?, updated_at = ? WHERE id = ? AND project_id = ?`
+  ).bind(b.decision, actor, t, stage, t, id, project.id).run();
+  await logEvent(env, id, actor, "decision", b.decision, note || null);
+  await syncItemComments(env, project, id);
+  return json({ ok: true, stage });
+}
+
+async function routeItemStage(req: Request, env: Env, project: Project, id: string): Promise<Response> {
+  const actor = actorOf(req);
+  if (!actor) return err(401, "actor required");
+  const b = await req.json().catch(() => null) as { stage?: unknown; note?: unknown } | null;
+  if (!b || typeof b.stage !== "string" || !ITEM_STAGES.has(b.stage)) return err(400, "invalid stage");
+  const item = await env.DB.prepare("SELECT stage FROM items WHERE id = ? AND project_id = ?").bind(id, project.id).first<{ stage: string }>();
+  if (!item) return err(404, "not found");
+  const move = STAGE_MOVES[item.stage];
+  if (!move || !move.to.includes(b.stage)) return err(409, `cannot move from ${item.stage} to ${b.stage}`);
+  if (move.approverOnly && !isApprover(project, actor)) return err(403, "not an approver");
+  await env.DB.prepare("UPDATE items SET stage = ?, updated_at = ? WHERE id = ? AND project_id = ?").bind(b.stage, now(), id, project.id).run();
+  await logEvent(env, id, actor, "stage", b.stage, typeof b.note === "string" ? b.note.trim().slice(0, 4000) || null : null);
+  await syncItemComments(env, project, id);
+  return json({ ok: true, stage: b.stage });
+}
+
+/** Comments with no item yet: the triage queue. */
+async function routeTriageQueue(_req: Request, env: Env, project: Project): Promise<Response> {
+  const { results } = await env.DB.prepare(
+    `SELECT c.* FROM comments c WHERE c.project_id = ? AND c.status IN ('open','in-progress')
+     AND NOT EXISTS (SELECT 1 FROM item_comments ic WHERE ic.comment_id = c.id) ORDER BY c.created_at ASC LIMIT 500`
+  ).bind(project.id).all();
+  return json({ comments: results });
+}
+
+async function routeSetApprovers(req: Request, env: Env, project: Project): Promise<Response> {
+  const b = await req.json().catch(() => null) as { approvers?: unknown } | null;
+  if (!b || !Array.isArray(b.approvers) || !b.approvers.every((x) => typeof x === "string" && x.trim())) return err(400, "approvers must be a list of names");
+  const current = approversOf(project as Project & { approvers?: string | null });
+  const actor = actorOf(req);
+  if (current.length && !isApprover(project, actor)) return err(403, "not an approver");
+  const list = (b.approvers as string[]).map((x) => x.trim().slice(0, 120)).slice(0, 20);
+  await env.DB.prepare("UPDATE projects SET approvers = ? WHERE id = ?").bind(JSON.stringify(list), project.id).run();
+  return json({ approvers: list });
 }
 
 // ─── AI inference (api-inference-endpoint) ────────────────────────────────────
@@ -436,6 +707,19 @@ export default {
         if (action === "resolve" && req.method === "POST") return withCors(await routeResolve(req, env, project, id, true), cors);
         if (action === "reopen" && req.method === "POST") return withCors(await routeResolve(req, env, project, id, false), cors);
         if (action === "status" && req.method === "POST") return withCors(await routeStatus(req, env, project, id), cors);
+      }
+      if (url.pathname === "/v1/projects/me/approvers" && req.method === "PUT") return withCors(await routeSetApprovers(req, env, project), cors);
+      if (url.pathname === "/v1/triage/queue" && req.method === "GET") return withCors(await routeTriageQueue(req, env, project), cors);
+      if (url.pathname === "/v1/items" && req.method === "POST") return withCors(await routeCreateItem(req, env, project), cors);
+      if (url.pathname === "/v1/items" && req.method === "GET") return withCors(await routeListItems(req, env, project, url), cors);
+      const im = url.pathname.match(/^\/v1\/items\/([a-zA-Z0-9-]+)(\/(decision|stage))?$/);
+      if (im) {
+        const iid = im[1];
+        const action = im[3];
+        if (!action && req.method === "GET") return withCors(await routeGetItem(req, env, project, iid), cors);
+        if (!action && req.method === "PATCH") return withCors(await routePatchItem(req, env, project, iid), cors);
+        if (action === "decision" && req.method === "POST") return withCors(await routeDecision(req, env, project, iid), cors);
+        if (action === "stage" && req.method === "POST") return withCors(await routeItemStage(req, env, project, iid), cors);
       }
       if (url.pathname === "/v1/screenshots" && req.method === "POST") return withCors(await routeUploadScreenshot(req, env, project), cors);
       const sm = url.pathname.match(/^\/v1\/screenshots\/(.+)$/);

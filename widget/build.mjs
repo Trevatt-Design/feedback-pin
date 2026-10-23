@@ -6,7 +6,10 @@ const opts = {
   entryPoints: ["src/index.ts"],
   bundle: true,
   format: "iife",
-  globalName: "FeedbackPin",
+  // No globalName: with one, the IIFE assigns the module namespace
+  // ({ default: { init } }) to window.FeedbackPin and overwrites the
+  // `globalThis.FeedbackPin = { init }` set in src/index.ts, which breaks
+  // the programmatic FeedbackPin.init() path documented in docs/install.md.
   outfile: "dist/feedback-pin.js",
   minify: !watch,
   sourcemap: watch,

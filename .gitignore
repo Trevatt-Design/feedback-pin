@@ -4,3 +4,8 @@ dist
 .dev.vars
 *.log
 .DS_Store
+
+# Local probe output
+reports/jpg/
+reports/review-shots/
+smoke-test/out/

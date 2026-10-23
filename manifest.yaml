@@ -760,6 +760,79 @@ features:
   # Cross-cutting "rules" that apply to every surface, not a single component.
   # Treated as a feature so they live alongside other contracts and have a
   # single, citable id when an invariant needs to be referenced from a PR.
+  - id: api-review-items
+    surface: api
+    contract: |
+      Review items turn triaged comments into decisions. Schema in
+      `api/schema-v3.sql`: `items`, `item_comments` (many-to-many, so one
+      comment can produce several items and several comments can merge into
+      one), `item_events` (audit trail), and `projects.approvers` (JSON list).
+      Routes, all project-token auth:
+        POST  /v1/items                 create from comment_ids with kind,
+                                        outcome, verdict, design, proposal
+        GET   /v1/items?round=&stage=   list with comment_ids and per-round
+                                        counts (items, waiting)
+        GET   /v1/items/:id             item, comments, events, approvers
+        PATCH /v1/items/:id             title, verdict, round, design,
+                                        proposal, add_comment_ids (merge)
+        POST  /v1/items/:id/decision    approve | decline | discuss
+        POST  /v1/items/:id/stage       move along STAGE_MOVES
+        GET   /v1/triage/queue          open/in-progress comments with no item
+        PUT   /v1/projects/me/approvers set approver names
+      Kinds: question, command. A question can only be answered.
+      Outcomes and their first stage: answered and built-right close at once;
+      build-fix starts at ready-to-build; missing and conflict start at
+      awaiting-decision. Decisions: approve -> approved, decline -> closed,
+      discuss -> discuss. Stage moves: approved -> in-figma -> ready-to-build
+      -> built -> closed (built may go back to ready-to-build). Decisions and
+      the Figma sign-off (in-figma -> ready-to-build) need an actor on the
+      approver list; an empty list lets any named actor decide (local use).
+      The actor is the Cloudflare Access email header when deployed, else
+      `x-fp-actor`. No commenter accounts (af-accounts holds). Creating an
+      item replies on every linked comment with `<ref> · <outcome>: verdict`.
+      A comment is resolved when every item made from it is closed, and
+      in-progress otherwise. Every create, triage edit, decision and stage
+      move is written to item_events.
+    invariants:
+      - question-can-only-be-answered
+      - outcome-sets-initial-stage
+      - decision-needs-named-approver
+      - decline-and-discuss-need-a-note
+      - figma-sign-off-is-approver-only
+      - stage-moves-follow-the-table
+      - comment-status-follows-its-items
+      - every-change-logged-to-item-events
+    tests:
+      - tests/api/items.test.ts
+    conflicts-with: []
+  - id: dashboard-review
+    surface: dashboard
+    contract: |
+      `dashboard/web/src/routes/Review.tsx` at `#/review`, linked from the
+      sidebar. The decision surface of the feedback loop. Each item card
+      shows, side by side: what was asked (the comment text with its build
+      screenshot and a link to the comment), what the design says (screen
+      key, designed-screen image when triage uploaded one, Open in Figma, an
+      opt-in live Figma embed, quoted Notion references), then the verdict
+      and, for flags, the proposed design change with its effects. Below it,
+      the one action the stage allows: Approve, Discuss, Decline (note
+      required for the last two) while waiting for a decision, else the stage
+      moves (Updated in Figma, Sign off design, Mark built, Close, Send back
+      to build). Round chips and filter chips (Needs decision, default; In
+      progress; Closed; All) with counts. A "Your name" field stores the
+      reviewer name in localStorage `fp_actor`; `api()` sends it as
+      `x-fp-actor`. Decision buttons are disabled unless the name is on the
+      approver list (or the list is empty). History loads on demand. SDS
+      primitives for Button, Input, Textarea; chips are native buttons with
+      aria-pressed.
+    invariants:
+      - review-defaults-to-needs-decision
+      - review-card-shows-context
+      - review-decision-sends-actor
+      - review-decline-needs-note
+    tests:
+      - tests/e2e/dashboard-review.spec.ts
+    conflicts-with: []
   - id: universal-rules
     surface: cross-cutting
     contract: |

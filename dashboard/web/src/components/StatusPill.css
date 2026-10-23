@@ -1,20 +1,6 @@
-/* Status pill colours — single source of truth lives in
-   widget/src/tokens.ts; these rules duplicate the same SDS token
-   references so the dashboard and widget cannot drift. The visual is a
-   small inline dot in the row meta line.
-
-   Mapping (per Stage 3 amendment):
-     open        → info → background-brand-default fallback
-     in-progress → warning-default
-     wont-fix    → neutral-tertiary
-     resolved    → positive-default
-
-   The plan's amendment notes that if green-resolved feels too celebratory
-   we may swap to neutral-secondary. Decision: keep positive-default for
-   now; the engineering audience reading the dashboard should perceive
-   "resolved" as a clear positive endpoint, and the dashboard lives behind
-   a project token (not a public-facing surface). Swap recorded in
-   decisions.log if the polish pass sees it differently. */
+/* Status dot shown in row meta and the detail status row. Colours come
+   through the SDS slots set in app.css (open blue, in progress amber,
+   won't fix grey, resolved green). */
 .status-pill {
   display: inline-block;
   width: 8px;
@@ -24,19 +10,14 @@
   vertical-align: middle;
 }
 .status-open {
-  background: var(--sds-color-background-info-default, var(--sds-color-background-brand-default, #2563EB));
+  background: var(--sds-color-background-info-default, #0068d6);
 }
 .status-in-progress {
-  background: var(--sds-color-background-warning-default, #D97706);
+  background: var(--sds-color-background-warning-default, #e5a000);
 }
 .status-wont-fix {
-  background: var(--sds-color-background-neutral-tertiary, #6B7280);
+  background: var(--sds-color-background-neutral-tertiary, #8f8f8f);
 }
 .status-resolved {
-  background: var(--sds-color-background-positive-default, #14ae5c);
-}
-/* Provide --sds-color-background-info-default if the upstream theme
-   doesn't ship it. Brand-default is the fallback (matches widget). */
-:root {
-  --sds-color-background-info-default: var(--sds-color-background-brand-default, #2563EB);
+  background: var(--sds-color-background-positive-default, #27a35a);
 }

@@ -3,31 +3,48 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--sds-color-background-default-secondary, #fafafa);
+  background: var(--fp-bg);
+  padding: 24px;
 }
 .fp-login-card {
-  width: 360px;
-  padding: var(--sds-size-space-700, 28px);
-  background: var(--sds-color-background-default-default, #ffffff);
-  border: 1px solid var(--sds-color-border-default-default, #e6e6e6);
-  border-radius: var(--sds-size-radius-200, 8px);
-  box-shadow: var(--sds-effect-shadow-200, 0 1px 2px rgba(0, 0, 0, 0.04));
+  width: 380px;
+  max-width: 100%;
+  padding: 32px;
+  background: var(--fp-surface);
+  border: 1px solid var(--fp-line);
+  border-radius: 12px;
+  box-shadow: var(--fp-shadow-pop);
   display: flex;
   flex-direction: column;
-  gap: var(--sds-size-space-300, 12px);
+  gap: 12px;
+}
+.fp-login-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--fp-fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
 }
 .fp-login-h1 {
-  font-size: 18px;
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: -0.02em;
   margin: 0;
   font-weight: 600;
-  color: var(--sds-color-text-default-default, #1a1a1a);
+  color: var(--fp-fg);
 }
 .fp-login-sub {
-  color: var(--sds-color-text-default-secondary, #6b6b6b);
-  margin: 0;
-  font-size: 13px;
+  color: var(--fp-fg-2);
+  margin: 0 0 8px;
+  font-size: 14px;
 }
 .fp-login-input {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--fp-mono);
 }
-/* `.fp-err` — defined once globally in app.css. */
+.fp-login-card .button {
+  width: 100%;
+  height: 40px;
+}

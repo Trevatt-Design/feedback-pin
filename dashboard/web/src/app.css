@@ -1,43 +1,93 @@
-/* Project-level dashboard app styles.
+/* Project-level dashboard styles and the dashboard's token layer.
 
-   The vendored SDS theme.css already sets `color-scheme: light` on
-   :root and ships the full token suite. This file only adds the body
-   background, root font stack, and the keyboard-focus reset for
-   <main tabindex="-1">. Anything design-system-y belongs in theme.css
-   or a component CSS file; this file stays small. */
+   Look: neutral, Geist-set, hairline borders, black primary action, one
+   blue for focus and links. The values are written INTO the SDS semantic
+   slots the vendored primitives read, so Button, Input, Textarea and Tag
+   restyle without touching vendored files, and the var chain stays
+   SDS-shaped for the contract tests.
+
+   Contrast: secondary text is #5f5f5f (6.4:1 on white, 6.1:1 on #fafafa),
+   above WCAG AA. #8f8f8f is decoration only, never body text. */
 
 :root {
   color-scheme: light;
 
-  /* Override SDS `text-default-secondary` from gray-500 (#757575) to
-     gray-600 (#444444). SDS's default secondary text contrasts at
-     ~4.48:1 on pure white, which falls just below WCAG AA's 4.5:1
-     threshold and was flagged by axe (`color-contrast`, serious) on
-     the comments-list <p className="fp-h-sub">. Gray-600 lifts every
-     surface that consumes the secondary token (subtitle, list-meta,
-     panel labels, eyebrow text) to ~9.7:1 in one place rather than
-     patching each call site. The visual register stays "quiet
-     subtitle" — the bump is small enough to be imperceptible at body
-     sizes but lands the contrast above AA. */
-  --sds-color-text-default-secondary: var(--sds-color-gray-600, #444444);
+  /* Palette */
+  --fp-bg: #fafafa;
+  --fp-surface: #ffffff;
+  --fp-subtle: #f5f5f5;
+  --fp-hover: #f2f2f2;
+  --fp-fg: #171717;
+  --fp-fg-2: #5f5f5f;
+  --fp-fg-3: #8f8f8f;
+  --fp-line: #ebebeb;
+  --fp-line-strong: #d6d6d6;
+  --fp-blue: #0068d6;
+  --fp-blue-bg: #ebf5ff;
+  --fp-blue-fg: #0055b3;
+  --fp-amber-bg: #fff4d6;
+  --fp-amber-fg: #8a4b00;
+  --fp-green-bg: #e9f9ee;
+  --fp-green-fg: #1a6b37;
+  --fp-red-bg: #ffebeb;
+  --fp-red-fg: #b4232c;
+  --fp-radius: 6px;
+  --fp-radius-lg: 10px;
+  --fp-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --fp-shadow-pop: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 4px 8px -4px rgba(0, 0, 0, 0.08),
+    0 16px 24px -8px rgba(0, 0, 0, 0.08);
+  --fp-ring: 0 0 0 2px var(--fp-surface), 0 0 0 4px var(--fp-blue);
+  --fp-font: "Geist Sans", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --fp-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* SDS slots read by the vendored primitives */
+  --sds-typography-family-sans: var(--fp-font);
+  --sds-typography-family-mono: var(--fp-mono);
+  --sds-font-family-base: var(--fp-font);
+  --sds-typography-body-size-medium: 14px;
+  --sds-typography-body-size-small: 13px;
+  --sds-size-radius-100: 4px;
+  --sds-size-radius-200: var(--fp-radius);
+  --sds-color-background-default-default: var(--fp-surface);
+  --sds-color-background-default-default-hover: var(--fp-hover);
+  --sds-color-background-default-secondary: var(--fp-bg);
+  --sds-color-background-default-secondary-hover: var(--fp-hover);
+  --sds-color-background-default-tertiary: var(--fp-subtle);
+  --sds-color-background-default-tertiary-hover: var(--fp-hover);
+  --sds-color-text-default-default: var(--fp-fg);
+  --sds-color-text-default-secondary: var(--fp-fg-2);
+  --sds-color-text-default-tertiary: var(--fp-fg-2);
+  --sds-color-icon-default-default: var(--fp-fg);
+  --sds-color-border-default-default: var(--fp-line-strong);
+  --sds-color-border-default-secondary: var(--fp-line);
+  --sds-color-background-brand-default: var(--fp-fg);
+  --sds-color-background-brand-hover: #383838;
+  --sds-color-background-brand-secondary: var(--fp-subtle);
+  --sds-color-background-brand-secondary-hover: var(--fp-hover);
+  --sds-color-background-brand-tertiary: var(--fp-blue-bg);
+  --sds-color-border-brand-default: var(--fp-fg);
+  --sds-color-border-brand-secondary: var(--fp-line-strong);
+  --sds-color-text-brand-default: var(--fp-fg);
+  --sds-color-text-brand-on-brand: #ffffff;
+  --sds-color-icon-brand-on-brand: #ffffff;
+  --sds-color-text-brand-tertiary: var(--fp-fg);
+  --sds-color-icon-brand-tertiary: var(--fp-fg);
+  --sds-color-background-info-default: var(--fp-blue);
+  --sds-color-background-positive-default: #27a35a;
+  --sds-color-background-warning-default: #e5a000;
+  --sds-color-background-neutral-tertiary: var(--fp-fg-3);
+  --sds-color-background-danger-tertiary: var(--fp-red-bg);
+  --sds-color-text-danger-default: var(--fp-red-fg);
+  --global-focus-ring-color: var(--fp-blue);
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--sds-color-background-default-secondary, #fafafa);
-  color: var(--sds-color-text-default-default, #1a1a1a);
-  font-family: var(
-    --sds-font-family-base,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "Helvetica Neue",
-    Arial,
-    sans-serif
-  );
+  background: var(--fp-bg);
+  color: var(--fp-fg);
+  font-family: var(--fp-font);
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -48,20 +98,299 @@ body {
   min-height: 100vh;
 }
 
-/* `<main tabindex="-1">` lets us focus the landmark after a hash route
-   change without showing an outline (the route's heading is the visible
-   anchor). This matches the Stage 3 accessibility amendment. */
+a {
+  color: var(--fp-blue);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+a:focus-visible,
+button:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: var(--fp-ring);
+  border-radius: var(--fp-radius);
+}
+
+/* <main tabindex="-1"> is focused after a hash route change without an
+   outline; the route's heading is the visible anchor. */
 main[tabindex="-1"]:focus,
 main[tabindex="-1"]:focus-visible {
   outline: none;
+  box-shadow: none;
 }
 
-/* `.fp-err` — inline error banner reused by Login, CommentsList, and
-   CommentDetail. Defined once here so the three routes can't drift. */
+/* Inline error, shared by every route. */
 .fp-err {
-  background: var(--sds-color-background-danger-tertiary, #fdecea);
-  color: var(--sds-color-text-danger-default, #8a1f12);
-  padding: var(--sds-size-space-200, 8px) var(--sds-size-space-300, 10px);
-  border-radius: var(--sds-size-radius-100, 6px);
+  background: var(--fp-red-bg);
+  color: var(--fp-red-fg);
+  padding: 8px 12px;
+  border-radius: var(--fp-radius);
+  font-size: 13px;
+}
+
+/* Shared page furniture */
+.fp-h1 {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--fp-fg);
+}
+.fp-h-sub {
+  color: var(--fp-fg-2);
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+.fp-page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.fp-mono {
+  font-family: var(--fp-mono);
   font-size: 12px;
+}
+.fp-muted {
+  color: var(--fp-fg-2);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* Segmented control: used for Open/Resolved and the review filters. */
+.fp-seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--fp-subtle);
+  border: 1px solid var(--fp-line);
+  border-radius: 8px;
+}
+.fp-seg button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font: 500 13px var(--fp-font);
+  color: var(--fp-fg-2);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fp-seg button:hover {
+  color: var(--fp-fg);
+}
+.fp-seg button.is-active {
+  background: var(--fp-surface);
+  color: var(--fp-fg);
+  box-shadow: 0 0 0 1px var(--fp-line), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.fp-count {
+  font: 500 11px var(--fp-mono);
+  color: var(--fp-fg-2);
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Badges */
+.fp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font: 500 12px var(--fp-font);
+  white-space: nowrap;
+  background: var(--fp-subtle);
+  color: var(--fp-fg);
+  border: 1px solid var(--fp-line);
+}
+.fp-badge-dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.fp-badge-amber { background: var(--fp-amber-bg); color: var(--fp-amber-fg); border-color: transparent; }
+.fp-badge-blue { background: var(--fp-blue-bg); color: var(--fp-blue-fg); border-color: transparent; }
+.fp-badge-green { background: var(--fp-green-bg); color: var(--fp-green-fg); border-color: transparent; }
+.fp-badge-red { background: var(--fp-red-bg); color: var(--fp-red-fg); border-color: transparent; }
+
+/* Card */
+.fp-card {
+  background: var(--fp-surface);
+  border: 1px solid var(--fp-line);
+  border-radius: var(--fp-radius-lg);
+  box-shadow: var(--fp-shadow);
+}
+
+/* Native select styled to match. `font` shorthand resets line-height, so
+   the font is set with longhands and the text is centred by padding. */
+.fp-select,
+.controls .sort,
+.fp-status-select {
+  display: inline-block;
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 32px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--fp-line-strong);
+  border-radius: var(--fp-radius);
+  background: var(--fp-surface)
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%235f5f5f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+    no-repeat right 11px center;
+  font-family: var(--fp-font);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 30px;
+  color: var(--fp-fg);
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.fp-select:hover,
+.controls .sort:hover,
+.fp-status-select:hover {
+  border-color: #b5b5b5;
+}
+.fp-select:focus-visible,
+.controls .sort:focus-visible,
+.fp-status-select:focus-visible {
+  outline: none;
+  box-shadow: var(--fp-ring);
+}
+
+/* Plain buttons used for toolbar actions (not SDS: these sit in dense rows). */
+.fp-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--fp-line-strong);
+  border-radius: var(--fp-radius);
+  background: var(--fp-surface);
+  color: var(--fp-fg);
+  font-family: var(--fp-font);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.fp-btn:hover {
+  background: var(--fp-subtle);
+  text-decoration: none;
+}
+.fp-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: var(--fp-surface);
+}
+.fp-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.fp-btn-icon {
+  width: 32px;
+  padding: 0;
+}
+.fp-btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--fp-fg-2);
+}
+.fp-btn-ghost:hover {
+  background: var(--fp-hover);
+  color: var(--fp-fg);
+}
+.fp-btn-primary {
+  background: var(--fp-fg);
+  border-color: var(--fp-fg);
+  color: #fff;
+}
+.fp-btn-primary:hover {
+  background: #383838;
+}
+.fp-btn-primary:disabled {
+  background: var(--fp-fg);
+}
+
+/* Keyboard hint */
+.fp-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--fp-line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--fp-surface);
+  font: 500 11px var(--fp-mono);
+  color: var(--fp-fg-2);
+}
+
+/* Avatar */
+.fp-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--fp-subtle);
+  box-shadow: inset 0 0 0 1px var(--fp-line);
+  font: 600 10px var(--fp-font);
+  letter-spacing: 0.02em;
+  color: var(--fp-fg-2);
+  flex-shrink: 0;
+}
+.fp-avatar.is-team {
+  background: var(--fp-fg);
+  color: #fff;
+  box-shadow: none;
+}
+
+/* Skeleton shimmer for loading states */
+.fp-skel {
+  background: linear-gradient(90deg, var(--fp-subtle) 25%, #ececec 37%, var(--fp-subtle) 63%);
+  background-size: 400% 100%;
+  animation: fp-skel 1.4s ease infinite;
+  border-radius: var(--fp-radius);
+}
+@keyframes fp-skel {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fp-skel { animation: none; }
+}
+
+.fp-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

@@ -2,8 +2,8 @@
  * Vite entry. Mounts <App /> on #root.
  *
  * Side-effect imports (in order):
- *   1. Inter + Roboto Mono — self-hosted via @fontsource (no Google Fonts,
- *      Stage 3 amendment).
+ *   1. Geist Sans + Geist Mono, self-hosted via @fontsource (no Google
+ *      Fonts, Stage 3 amendment).
  *   2. Vendored SDS reset.css → theme.css.
  *   3. Project-level app.css (color-scheme, body background, focus reset).
  *
@@ -11,11 +11,11 @@
  * imports from being tree-shaken away while still allowing unused JS
  * primitives to be dropped.
  */
-import "@fontsource/inter/400.css";
-import "@fontsource/inter/500.css";
-import "@fontsource/inter/600.css";
-import "@fontsource/inter/700.css";
-import "@fontsource/roboto-mono/400.css";
+import "@fontsource/geist-sans/latin-400.css";
+import "@fontsource/geist-sans/latin-500.css";
+import "@fontsource/geist-sans/latin-600.css";
+import "@fontsource/geist-mono/latin-400.css";
+import "@fontsource/geist-mono/latin-500.css";
 
 import "./sds/reset.css";
 import "./sds/theme.css";

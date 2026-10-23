@@ -13,7 +13,8 @@
  *  - Thread panel for clicked pins (replies, resolve, edit/delete own).
  *
  * Keyboard:
- *  - C toggles modes (when no input focused).
+ *  - C switches to Comment mode, V to Browse. Ignored while typing in any
+ *    field, while a composer is open, or with a modifier held.
  *  - Esc closes the active panel; Esc twice within ~700ms exits Comment mode.
  *  - Cmd/Ctrl+Return submits.
  *
@@ -47,6 +48,7 @@ export class WidgetUI {
 
   private toggleEl!: HTMLElement;
   private sidebarEl!: HTMLElement;
+  private sidebarTabEl!: HTMLButtonElement;
   private highlightEl!: HTMLElement;
   private stickyHighlightEl!: HTMLElement; // stays during compose
   // Dark "rest of page" overlay activated alongside the sticky highlight
@@ -58,6 +60,7 @@ export class WidgetUI {
   // the comment is submitted (the resulting pin renders at the anchor).
   private cursorBadgeEl!: HTMLElement;
   private cursorStage: "follow" | "snap" | "hidden" = "hidden";
+  private badgeHasPointer = false;
   private pins = new Map<string, HTMLButtonElement>();
   private comments = new Map<string, Comment>();
   private commentOrder: string[] = []; // stable numbering
@@ -90,7 +93,8 @@ export class WidgetUI {
   private escTimer = 0;
   private escCount = 0;
 
-  private filter: "open" | "resolved" | "all" = "open";
+  /** Resolved and won't-fix comments are hidden (list and pins) until this is on. */
+  private showResolved = false;
   private sidebarVisible = true;
   private headless = false;
   private searchQuery = "";
@@ -104,7 +108,11 @@ export class WidgetUI {
   constructor(private opts: UIOptions) {
     this.host = document.createElement("div");
     this.host.setAttribute("data-feedback-pin", "");
-    this.host.style.all = "initial";
+    // Zero-size anchor: every visible part is position:fixed inside the shadow
+    // root. Inline styles also neutralise the UA [popover] box (border, padding,
+    // background, centring) once the host is promoted to the top layer.
+    this.host.style.cssText =
+      "all:initial;position:fixed;top:0;left:0;width:0;height:0;margin:0;padding:0;border:0;overflow:visible;background:transparent;z-index:2147483647;";
     this.root = this.host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = widgetCss;
@@ -121,6 +129,7 @@ export class WidgetUI {
     this.renderHighlights();
 
     document.body.appendChild(this.host);
+    this.installTopLayer();
 
     // postMessage protocol with a wrapping review frame.
     window.addEventListener("message", this.onParentMessage);
@@ -145,10 +154,10 @@ export class WidgetUI {
     const el = document.createElement("div");
     el.className = "fp-toggle";
     el.innerHTML = `
-      <button data-mode="comment" class="fp-mode-comment is-active" aria-label="Comment mode (C)">
+      <button data-mode="comment" class="fp-mode-comment is-active" aria-label="Leave a comment (C)" data-tip="Leave a comment (c)">
         ${commentIcon()}<span>Comment</span><span class="fp-count" data-count>0</span>
       </button>
-      <button data-mode="browse" aria-label="Browse mode (C)">
+      <button data-mode="browse" aria-label="Navigate the site (V)" data-tip="Navigate the site (v)">
         ${cursorIcon()}<span>Browse</span>
       </button>
     `;
@@ -167,7 +176,7 @@ export class WidgetUI {
     el.className = "fp-sidebar";
     el.innerHTML = `
       <div class="fp-sidebar-head">
-        <h3>Comments</h3>
+        <h3>Comments <span class="fp-head-count" data-head-count></span></h3>
         <button class="fp-icon-btn" data-act="hide" title="Hide sidebar" aria-label="Hide sidebar">${closeIcon()}</button>
       </div>
       <div class="fp-sidebar-controls">
@@ -179,20 +188,21 @@ export class WidgetUI {
           <option value="unresolved">Unresolved first</option>
         </select>
       </div>
-      <div class="fp-sidebar-tabs" role="tablist">
-        <button data-filter="open" class="is-active">Open</button>
-        <button data-filter="resolved">Resolved</button>
-        <button data-filter="all">All</button>
+      <div class="fp-sidebar-tabs">
+        <label class="fp-switch">
+          <input type="checkbox" data-show-resolved>
+          <span class="fp-switch-track" aria-hidden="true"></span>
+          <span class="fp-switch-label">Show resolved <span class="fp-switch-count" data-resolved-count></span></span>
+        </label>
       </div>
       <div class="fp-sidebar-list" data-list></div>
     `;
     el.querySelector('[data-act="hide"]')!.addEventListener("click", () => this.toggleSidebar(false));
-    el.querySelectorAll<HTMLButtonElement>("[data-filter]").forEach(b => {
-      b.addEventListener("click", () => {
-        this.filter = b.getAttribute("data-filter") as "open" | "resolved" | "all";
-        el.querySelectorAll<HTMLButtonElement>("[data-filter]").forEach(x => x.classList.toggle("is-active", x === b));
-        this.renderSidebarList();
-      });
+    const showResolved = el.querySelector<HTMLInputElement>("[data-show-resolved]")!;
+    showResolved.addEventListener("change", () => {
+      this.showResolved = showResolved.checked;
+      this.comments.forEach(c => this.renderPin(c));
+      this.renderSidebarList();
     });
     const searchInput = el.querySelector<HTMLInputElement>("[data-search]")!;
     searchInput.addEventListener("input", () => {
@@ -209,6 +219,17 @@ export class WidgetUI {
     });
     this.sidebarEl = el;
     this.chrome.appendChild(el);
+
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = "fp-sidebar-tab";
+    tab.setAttribute("aria-label", "Collapse comments");
+    tab.title = "Collapse comments";
+    tab.setAttribute("aria-expanded", "true");
+    tab.innerHTML = chevronRightIcon();
+    tab.addEventListener("click", () => this.toggleSidebar(!this.sidebarVisible));
+    this.sidebarTabEl = tab;
+    this.chrome.appendChild(tab);
   }
 
   private renderHighlights() {
@@ -262,9 +283,12 @@ export class WidgetUI {
       el.style.left = (r.left - 10) + "px";
       el.style.top = (r.top - 10) + "px";
     }
-    // For "follow" stage, position is updated on every mousemove.
+    // For "follow" stage, position is updated on every mousemove. Until the
+    // pointer has moved at least once the badge has no position, so it stays
+    // invisible rather than parking at the top-left corner.
     if (stage === "follow") {
       el.style.transition = "opacity 120ms ease";
+      if (!this.badgeHasPointer) el.style.opacity = "0";
     }
   }
 
@@ -297,6 +321,13 @@ export class WidgetUI {
   private toggleSidebar(visible: boolean) {
     this.sidebarVisible = visible;
     this.sidebarEl?.classList.toggle("is-hidden", !visible);
+    const tab = this.sidebarTabEl;
+    if (tab) {
+      tab.classList.toggle("is-collapsed", !visible);
+      tab.setAttribute("aria-expanded", String(visible));
+      tab.setAttribute("aria-label", visible ? "Collapse comments" : "Show comments");
+      tab.title = visible ? "Collapse comments" : "Show comments";
+    }
   }
 
   // ------------------------------------------------------------------
@@ -328,11 +359,88 @@ export class WidgetUI {
     }
   };
 
+  // ---- Always on top -------------------------------------------------------
+  // z-index cannot beat the browser top layer (modal <dialog>, popovers,
+  // fullscreen), and showModal() makes everything outside the dialog inert.
+  // So the host is itself a manual popover, re-raised whenever the page puts
+  // something else in the top layer, and while a modal dialog is open it
+  // lives inside that dialog so it stays clickable. It returns to <body> when
+  // the dialog closes or is removed.
+  private supportsPopover = false;
+  private raiseQueued = false;
+  private raiseForce = false;
+
+  private installTopLayer() {
+    this.supportsPopover = typeof (this.host as HTMLElement & { showPopover?: () => void }).showPopover === "function";
+    if (this.supportsPopover) this.host.setAttribute("popover", "manual");
+    new MutationObserver((records) => {
+      for (const r of records) {
+        if (r.type === "attributes") {
+          // A dialog opening or closing, or a popover attribute changing.
+          if (r.target !== this.host) { this.queueRaise(true); return; }
+        } else if (!this.host.isConnected || r.removedNodes.length) {
+          // Host detached with a removed dialog, or a dialog subtree removed.
+          this.queueRaise(false);
+          return;
+        }
+      }
+    }).observe(document.documentElement, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["open"],
+    });
+    // toggle (popovers, newer dialogs) and close do not bubble; capture sees them.
+    document.addEventListener("toggle", (e) => {
+      if (e.target !== this.host && (e as Event & { newState?: string }).newState === "open") this.queueRaise(true);
+    }, true);
+    document.addEventListener("close", () => this.queueRaise(true), true);
+    document.addEventListener("fullscreenchange", () => this.queueRaise(true));
+    this.raiseToTop(true);
+  }
+
+  private queueRaise(force: boolean) {
+    this.raiseForce = this.raiseForce || force;
+    if (this.raiseQueued) return;
+    this.raiseQueued = true;
+    queueMicrotask(() => {
+      const f = this.raiseForce;
+      this.raiseQueued = false;
+      this.raiseForce = false;
+      this.raiseToTop(f);
+    });
+  }
+
+  /** The open modal dialog the host should live in, if any (last in DOM order). */
+  private topModal(): HTMLDialogElement | null {
+    const open = Array.from(document.querySelectorAll<HTMLDialogElement>("dialog[open]"));
+    for (let i = open.length - 1; i >= 0; i--) {
+      try { if (open[i].matches(":modal")) return open[i]; } catch { return null; }
+    }
+    return null;
+  }
+
+  private raiseToTop(force: boolean) {
+    const parent: Element = this.topModal() || document.body;
+    if (!parent) return;
+    const moved = this.host.parentNode !== parent;
+    if (moved) parent.appendChild(this.host);
+    if (!this.supportsPopover) return;
+    let open = false;
+    try { open = this.host.matches(":popover-open"); } catch { /* old engine */ }
+    if (open && !moved && !force) return;
+    try {
+      if (open) this.host.hidePopover();
+      this.host.showPopover();
+    } catch { /* host detached mid-transition; next mutation retries */ }
+  }
+
   private goHeadless() {
     if (this.headless) return;
     this.headless = true;
     this.toggleEl?.remove();
     this.sidebarEl?.remove();
+    this.sidebarTabEl?.remove();
     this.toggleEl = undefined as any;
     this.sidebarEl = undefined as any;
   }
@@ -365,6 +473,7 @@ export class WidgetUI {
     // stage. The mode indicator hides while hovering widget chrome (toggle,
     // sidebar) so it doesn't visually compete with those controls.
     if (this.cursorStage === "follow") {
+      this.badgeHasPointer = true;
       const overChrome = ev.target instanceof Element && this.host.contains(ev.target);
       if (overChrome) {
         this.cursorBadgeEl.style.opacity = "0";
@@ -495,8 +604,10 @@ export class WidgetUI {
     }));
 
     const autosize = () => {
-      input.style.height = "38px";
-      input.style.height = Math.min(200, input.scrollHeight) + "px";
+      // Collapse, then size to content. +2 covers the box-sizing border so
+      // a single line never scrolls by a pixel.
+      input.style.height = "0px";
+      input.style.height = Math.max(40, Math.min(200, input.scrollHeight + 2)) + "px";
     };
     input.addEventListener("input", autosize);
 
@@ -908,6 +1019,28 @@ export class WidgetUI {
     this.refreshCount();
   }
 
+  /** Current page URL comments are filed against. */
+  get pageUrl(): string {
+    return this.opts.pageUrl;
+  }
+
+  /**
+   * Swap to a new page URL after a client-side (SPA) navigation. Closes any
+   * open composer or thread, drops every pin from the previous page, then
+   * loads the comments for the new one. The host DOM has already changed by
+   * the time this runs, so anchors resolve against the new page.
+   */
+  setPage(pageUrl: string, comments: Comment[]) {
+    this.closeActive();
+    for (const pin of this.pins.values()) pin.remove();
+    this.pins.clear();
+    this.comments.clear();
+    this.commentOrder = [];
+    this.opts.pageUrl = pageUrl;
+    this.loadComments(comments);
+    this.postToParent({ type: "fp:widget-ready", uid: this.opts.uid, pageUrl, mode: this.mode, count: this.openCount() });
+  }
+
   private addComment(c: Comment, render = true) {
     if (!this.comments.has(c.id)) {
       this.comments.set(c.id, c);
@@ -960,18 +1093,27 @@ export class WidgetUI {
     const pin = this.pins.get(c.id);
     if (!pin) return;
     const el = resolveAnchor(c);
-    let x: number, y: number;
+    let x = NaN, y = NaN;
     if (el) {
       const r = el.getBoundingClientRect();
-      x = r.left + r.width / 2;
-      y = r.top + r.height / 2;
-    } else {
-      x = c.x_pct * window.innerWidth;
-      y = c.y_pct * window.innerHeight;
+      // A detached or display:none anchor reports a zero rect at (0,0);
+      // that is "not on screen", not "top-left corner".
+      if (r.width > 0 || r.height > 0) {
+        x = r.left + r.width / 2;
+        y = r.top + r.height / 2;
+      }
+    } else if (typeof c.x_pct === "number" && typeof c.y_pct === "number") {
+      x = toFraction(c.x_pct) * window.innerWidth;
+      y = toFraction(c.y_pct) * window.innerHeight;
     }
-    pin.style.left = x + "px";
-    pin.style.top = y + "px";
-    pin.style.display = "flex";
+    const onScreen = Number.isFinite(x) && Number.isFinite(y)
+      && x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight;
+    if (onScreen) {
+      pin.style.left = x + "px";
+      pin.style.top = y + "px";
+    }
+    const hiddenByFilter = !this.showResolved && isClosedStatus(c.status);
+    pin.style.display = (!onScreen || hiddenByFilter) ? "none" : "flex";
   }
 
   private scheduleReposition = () => {
@@ -991,6 +1133,8 @@ export class WidgetUI {
         el.style.display = open ? "" : "none";
       }
     }
+    const hc = this.sidebarEl?.querySelector<HTMLElement>("[data-head-count]");
+    if (hc) hc.textContent = open ? String(open) : "";
     this.postToParent({ type: "fp:count", count: open });
   }
 
@@ -1002,14 +1146,11 @@ export class WidgetUI {
     }
     const host = this.sidebarEl.querySelector<HTMLElement>("[data-list]")!;
     const allComments = this.commentOrder.map(id => this.comments.get(id)!);
-    // Tab filter first. Tabs are still binary (Open / Resolved); the four
-    // statuses bucket into them: open+in-progress → "open"; resolved+wont-fix
-    // → "resolved".
-    const tabFiltered = allComments.filter(c => {
-      if (this.filter === "all") return true;
-      if (this.filter === "open") return c.status === "open" || c.status === "in-progress";
-      return c.status === "resolved" || c.status === "wont-fix";
-    });
+    // Closed (resolved + wont-fix) comments are hidden unless the switch is on.
+    const tabFiltered = allComments.filter(c => this.showResolved || !isClosedStatus(c.status));
+    const closedCount = allComments.filter(c => isClosedStatus(c.status)).length;
+    const rc = this.sidebarEl.querySelector<HTMLElement>("[data-resolved-count]");
+    if (rc) rc.textContent = closedCount ? String(closedCount) : "";
 
     // Update search placeholder using the count visible *before* search applies.
     const searchInput = this.sidebarEl.querySelector<HTMLInputElement>("[data-search]");
@@ -1056,11 +1197,11 @@ export class WidgetUI {
         <div class="fp-item-body">
           <div class="fp-item-text">${escapeHtml(c.change_text)}</div>
           <div class="fp-item-meta">
-            ${c.site_wide ? `<span class="fp-item-tag">Site-wide</span>` : ``}
             <span class="fp-status-pill fp-status-${escapeHtml(c.status)}" aria-label="Status: ${escapeHtml(statusLabel(c.status))}"></span>
-            <span>${formatTime(c.created_at)}</span>
-            <span>·</span>
-            <span title="Author ID">${escapeHtml(shortUid(c.anon_id || "anon"))}</span>
+            <span class="fp-item-author" title="${escapeHtml(shortUid(c.anon_id || "anon"))}">${escapeHtml(isMine ? "You" : authorName(c))}</span>
+            <span aria-hidden="true">·</span>
+            <time title="${escapeHtml(formatFull(c.created_at))}">${formatTime(c.created_at)}</time>
+            ${c.site_wide ? `<span class="fp-item-tag">Site-wide</span>` : ``}
           </div>
         </div>
         <div class="fp-item-actions">
@@ -1326,8 +1467,21 @@ export class WidgetUI {
   // ------------------------------------------------------------------
 
   private onGlobalKey = (e: KeyboardEvent) => {
-    const target = e.target as Element | null;
-    const inField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || (target as HTMLElement).isContentEditable);
+    // composedPath so fields inside our shadow root (and the host page's)
+    // are seen as fields, not as their shadow host.
+    const target = ((typeof e.composedPath === "function" && e.composedPath()[0]) || e.target) as Element | null;
+    const inField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || (target as HTMLElement).isContentEditable);
+    // Mode shortcuts. Plain keypress only: nothing typed into a field, no
+    // composer open (its fields may not be the event target when it has
+    // just opened), no modifier so Cmd+C / Ctrl+V keep their meaning.
+    if (!inField && !this.composer && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat) {
+      const k = e.key.toLowerCase();
+      if (k === "c" || k === "v") {
+        e.preventDefault();
+        this.setMode(k === "c" ? "comment" : "browse");
+        return;
+      }
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       // Esc mirrors click-outside semantics:
@@ -1354,10 +1508,6 @@ export class WidgetUI {
       clearTimeout(this.escTimer);
       this.escTimer = window.setTimeout(() => { this.escCount = 0; }, 700);
       return;
-    }
-    if ((e.key === "c" || e.key === "C") && !inField && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      this.setMode(this.mode === "comment" ? "browse" : "comment");
     }
   };
 }
@@ -1439,12 +1589,38 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
+/** Stored pin coordinates are a 0-1 fraction on web and a percent on mobile. */
+function toFraction(v: number): number {
+  return v > 1 ? v / 100 : v;
+}
+
+function authorName(c: Comment): string {
+  const named = (c as Comment & { commenter_name?: string | null }).commenter_name;
+  if (named && named.trim()) return named.trim();
+  if (c.anon_id) return "Guest " + c.anon_id.replace(/[^a-z0-9]/gi, "").slice(-4);
+  return "Guest";
+}
+
+/** British relative time: Just now, 5m ago, 3h ago, Yesterday, Mon, 20 Oct. */
 function formatTime(ts: number): string {
-  const diff = (Date.now() - ts) / 1000;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.round(diff / 60)}m`;
-  if (diff < 86400) return `${Math.round(diff / 3600)}h`;
-  return new Date(ts).toLocaleDateString();
+  const now = new Date();
+  const d = new Date(ts);
+  const diff = (now.getTime() - ts) / 1000;
+  if (diff < 60) return "Just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+  if (days === 0) return `${Math.floor(diff / 3600)}h ago`;
+  if (days === 1) return "Yesterday";
+  if (days < 7) return d.toLocaleDateString("en-GB", { weekday: "short" });
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString("en-GB", sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatFull(ts: number): string {
+  return new Date(ts).toLocaleString("en-GB", {
+    weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
 }
 
 function commentIcon() {
@@ -1452,6 +1628,9 @@ function commentIcon() {
 }
 function cursorIcon() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l14 9-7 1-3 7-4-17z"/></svg>`;
+}
+function chevronRightIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>`;
 }
 function closeIcon() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;

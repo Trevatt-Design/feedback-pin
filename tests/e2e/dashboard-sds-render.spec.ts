@@ -88,6 +88,10 @@ async function stubApi(page: Page) {
     if (route.request().method() !== "GET") return route.continue();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ comments: COMMENTS }) });
   });
+  // The top bar reads review counts on every signed-in route.
+  await page.route(/\/v1\/items(\?.*)?$/, (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], rounds: [] }) }),
+  );
   await page.route(/\/v1\/comments\/[^/?#]+(\?.*)?$/, async (route: Route) => {
     if (route.request().method() !== "GET") return route.continue();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ comment: COMMENTS[0], replies: [] }) });
